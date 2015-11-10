@@ -38,27 +38,33 @@ static inline void runTest( uint64_t n, double* x, const char* methodName, doubl
 	double t = t1-t0;
 	if(Tref==0.0) { Tref = t; }
 	bool resultOk = assess( r );
-	printf("%-20s : time=%03.3lf, sum=%20.20lf, sign=%ld, exp=%d, mantissa=%017ld %c \tspeedup=%.2lg\n",methodName,t,r,s,e,m, resultOk?' ':'X', Tref/t );
+	printf("%-20s : time=%03.4lf, sum=%20.20lf, sign=%ld, exp=%d, mantissa=%017ld %c \tspeedup=%.2lg\n",methodName,t,r,s,e,m, resultOk?' ':'X', Tref/t );
 }
 
 int main(int argc, char* argv[])
 {
-	long N = atol(argv[1]);
+	uint64_t N = atol(argv[1]);
 	long seed = atol(argv[2]);
+	if( N < 1 ) { return 0; }
+
 	double* x = (double*)malloc(N*sizeof(double));
 	if( seed >= 0 )
 	{
 		srand48(seed);
 		for(uint64_t i=0;i<N;i++)
 		{
-			x[i] = drand48() * exp2( static_cast<int>(drand48()*40.0-20.0) );
+			x[i] = (drand48()-0.5) * exp2( static_cast<int>(drand48()*40.0-20.0) );
 		}
+		x[ static_cast<uint64_t>(drand48()*(N-1)) ] = 0.0;
 	}
 	else
 	{
 		for(uint64_t i=0;i<N;i++)
 		{
-			x[i] = seed + i * exp2( (i*40)/N - 20 );
+			double E = ( ((double)i) * 40.0 / (double)N ) - 20.0;
+			double I = i;
+			double S = seed;
+			x[i] = S + I * exp2( E );
 		}		
 	}
 	
@@ -86,7 +92,7 @@ int main(int argc, char* argv[])
 	runTest(N,x,"SumNoOpt",Tref,f64SumNoOpt, [sumNoOpt](double r)->bool { return r==sumNoOpt; } );
 	runTest(N,x,"Sum",Tref,f64Sum, [sumOpt](double r)->bool { return r==sumOpt; } );
 	runTest(N,x,"SumI128",Tref,f64Sumi128, [sumi128](double r)->bool { return r==sumi128; } );
-	runTest(N,x,"if64Sum",Tref,if64Sum, [sumif](double r)->bool { return r==sumif; } );
+	runTest(N,x,"SumIF",Tref,if64Sum, [sumif](double r)->bool { return r==sumif; } );
 
 	return 0;
 }
