@@ -1,4 +1,4 @@
-#include "RAddCommon.h"
+#include "IFloat64.h"
 
 #ifdef _OPENMP
 
@@ -17,7 +17,7 @@ double if64Sum(uint64_t n, const double * x)
         const uint64_t start = (n*tid)/nthreads;
         const uint64_t end = (n*(tid+1))/nthreads;
 
-        radd.insertValues( end-start , x+start );
+        radd.addValues( end-start , x+start );
         radd.removeCarries();
 
         // add thread mantissas to global bins

@@ -1,4 +1,4 @@
-W#ifndef __IFloat64Common_h
+#ifndef __IFloat64Common_h
 #define __IFloat64Common_h
 
 #include <cstdint>
@@ -106,7 +106,7 @@ struct IFloat64
 	        int32_t c = mcarry[i];
 	        uint16_t cre = (c==0) ? 0 : ( log2ui(c) + 1 );
 	        int16_t mre = (m==0) ? 0 : ( log2ui(m) - 52 ) ;
-		os << "bin "<<i<<" : cre="<<cre<<", mre="<<mre,<<", carry="<<c<<" : sum="<<( (double)m/((double)(1ULL<<52)) );
+		os << "bin "<<i<<" : cre="<<cre<<", mre="<<mre<<", carry="<<c<<" : sum="<<( (double)m/((double)(1ULL<<52)) );
 	    }
     }
 

@@ -1,13 +1,12 @@
-#include <stdio.h>
-#include <malloc.h>
-#include <stdlib.h>
 #include <time.h>
 #include <sys/time.h>
 #include <math.h>
 
-#include <algorithm>
 #include "f64math.h"
 #include "if64math.h"
+
+#include <algorithm>
+#include <iostream>
 
 static inline double wallclock()
 {
@@ -37,15 +36,15 @@ int main(int argc, char* argv[])
 			x[i] = seed + i * exp2( (i*40)/N - 20 );
 		}		
 	}
-
-	printf("N=%d, seed=%lg\n",N,seed);
+	
+	std::cout<<"N="<<N<<", seed="<<seed<<std::endl;
 
 	double Tref=0.0;
 	{
 	  double t0= wallclock();
 	  double r = f64Sum<double>( N, x );
 	  Tref = wallclock() - t0;
-	  printf("f64Sum<double>: time=%lg, result=%.20lg\n",Tref,r);
+	  std::cout<<"f64Sum<double>: time="<<Tref<<", result="<<r<<"\n";
 	}
 
 	{
@@ -53,15 +52,15 @@ int main(int argc, char* argv[])
 	  std::sort( x, x+N, [](double a, double b) -> bool { return fabs(a)<fabs(b); } );
 	  double r = f64Sum<__float128>( N, x );
 	  double t1= wallclock();
-	  printf("f64Sum<float128>: time=%lg (x%lg), result=%.20lg\n",t1-t0,(t1-t0)/Tref,r);
+	  std::cout<<"f64Sum<float128>: time="<<t1-t0<<"(x"<<(t1-t0)/Tref<<"), result="<<r<<"\n";
 	}
 
 	//for(int i=0;i<2;i++)
 	{
 	  double t0= wallclock();
-	  double r = rAddF64( N, x );
+	  double r = if64Sum( N, x );
 	  double t1= wallclock();
-	  printf("if64Sum: time=%lg (x%lg), result=%.20lg\n",t1-t0,(t1-t0)/Tref,r);
+	  std::cout<<"if64Sum: time="<<t1-t0<<"(x"<<(t1-t0)/Tref<<"), result="<<r<<"\n";
 	}
 
 	{
@@ -69,7 +68,7 @@ int main(int argc, char* argv[])
 	  std::sort( x, x+N, [](double a, double b) -> bool { return fabs(a)<fabs(b); } );
 	  double r = f64Sum<double>( N, x );
 	  double t1= wallclock();
-	  printf("sorted f64Sum<double>: time=%lg (x%lg), result=%.20lg\n",t1-t0,(t1-t0)/Tref,r);
+	  std::cout<<"sorted f64Sum: time="<<t1-t0<<"(x"<<(t1-t0)/Tref<<"), result="<<r<<"\n";
 	}
 
 	return 0;

@@ -2,7 +2,7 @@
 #define __f64math_h
 
 template<typename AccumT>
-double f64sum(int n, const double * x)
+double f64Sum(int n, const double * x)
 {
   AccumT r = 0.0;
 

@@ -1,6 +1,8 @@
 #ifndef __if64Sum_h
 #define __if64Sum_h
 
+#include <cstdint>
+
 double if64Sum(uint64_t n, const double * x);
 
 #endif
