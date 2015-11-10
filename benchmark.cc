@@ -39,20 +39,30 @@ int main(int argc, char* argv[])
 	
 	std::cout<<"N="<<N<<", seed="<<seed<<std::endl;
 
+	// openmp warm-up
+	{  double r = f64Sum( N, x ); if(r==0.0) std::cout<<"\n"; }
+
 	double Tref=0.0;
 	{
 	  double t0= wallclock();
-	  double r = f64Sum<double>( N, x );
+	  double r = f64SumNoOpt( N, x );
 	  Tref = wallclock() - t0;
-	  std::cout<<"f64Sum<double>: time="<<Tref<<", result="<<r<<"\n";
+	  std::cout<<"f64SumNoOpt: time="<<Tref<<", result="<<r<<"\n";
 	}
 
 	{
 	  double t0= wallclock();
-	  std::sort( x, x+N, [](double a, double b) -> bool { return fabs(a)<fabs(b); } );
-	  double r = f64Sum<__float128>( N, x );
+	  double r = f64Sum( N, x );
 	  double t1= wallclock();
-	  std::cout<<"f64Sum<float128>: time="<<t1-t0<<"(x"<<(t1-t0)/Tref<<"), result="<<r<<"\n";
+	  std::cout<<"f64Sum: time="<<t1-t0<<"(x"<<(t1-t0)/Tref<<"), result="<<r<<"\n";
+	}
+
+
+	{
+	  double t0= wallclock();
+	  double r = f64Sumi128( N, x );
+	  double t1= wallclock();
+	  std::cout<<"f64Sumi128: time="<<t1-t0<<"(x"<<(t1-t0)/Tref<<"), result="<<r<<"\n";
 	}
 
 	//for(int i=0;i<2;i++)
@@ -66,7 +76,7 @@ int main(int argc, char* argv[])
 	{
 	  double t0= wallclock();
 	  std::sort( x, x+N, [](double a, double b) -> bool { return fabs(a)<fabs(b); } );
-	  double r = f64Sum<double>( N, x );
+	  double r = f64Sum( N, x );
 	  double t1= wallclock();
 	  std::cout<<"sorted f64Sum: time="<<t1-t0<<"(x"<<(t1-t0)/Tref<<"), result="<<r<<"\n";
 	}

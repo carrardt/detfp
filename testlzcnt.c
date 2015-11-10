@@ -4,7 +4,7 @@
 int main(int argc,char* argv[])
 {
     long x = atoi(argv[1]);
-    printf("%d\n",__lzcnt64(x));
+    printf("%llu\n",__lzcnt64(x));
     return 0;
 }
 

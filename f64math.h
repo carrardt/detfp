@@ -1,18 +1,13 @@
 #ifndef __f64math_h
 #define __f64math_h
 
-template<typename AccumT>
-double f64Sum(int n, const double * x)
-{
-  AccumT r = 0.0;
+#include <cstdint>
 
-#ifdef _OPENMP
-#pragma omp simd reduction(+:r)
-#endif
-  for(int i=(n-1); i>=0; i--) { r += x[i]; }
 
-  return r;
-}
+double f64SumNoOpt(uint64_t n, const double * x) __attribute__((optimize("no-tree-vectorize"))) ;
+
+double f64Sum(uint64_t n, const double * x);
+double f64Sumi128(uint64_t n, const double * x);
 
 #endif
 
