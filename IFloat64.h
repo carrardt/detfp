@@ -7,25 +7,23 @@
 #include <x86intrin.h>
 
 #define DBG_ASSERT(x) assert(x)
-//#define DBG_ASSERT(x) (void)0
-#define EXPMIN (-128)
-#define EXPMAX (127)
-#define EXPRANGESIZE (EXPMAX-EXPMIN+1)
 
 static inline int log2ui(int64_t x)
 {
 	return __lzcnt64( (x<0) ? -x : x );
 }
 
-struct IFloat64
+template<int16_t EXPMIN=-128, int16_t EXPMAX=127>
+struct IFloat64T
 {
+    static constexpr uint16_t EXPRANGESIZE = (EXPMAX-EXPMIN+1);
     int64_t msum[EXPRANGESIZE];
     int32_t mcarry[EXPRANGESIZE];
     uint16_t bmin; // lowest exponent bin used
     uint16_t bmax;
     uint16_t nzCarries;
 
-    inline IFloat64() : bmin(EXPRANGESIZE-1), bmax(0), nzCarries(0)
+    inline IFloat64T() : bmin(EXPRANGESIZE-1), bmax(0), nzCarries(0)
     {
         for(int i=0;i<EXPRANGESIZE;i++)
         {
@@ -46,35 +44,40 @@ struct IFloat64
 
     inline void addValues(uint64_t n, const double * dx)
     {
-       const uint64_t * x = reinterpret_cast<const uint64_t*>( dx );
-       for(uint64_t i=0;i<n;i++)
-	   {
-	        int64_t s = x[i] & (1ULL<<63) ; s = s >> 63; 
-	        int16_t e = ( (x[i]>>52) & ((1ULL<<11)-1) ); 
-	        int64_t m = x[i] & ((1ULL<<52)-1ULL); 
-	        if(e!=0 || m!=0) { m = m | (1ULL<<52) ; e-=1023; } 
-	        m = (m^s) + ( s & 1ULL ) ; 
+       	const int64_t * x = reinterpret_cast<const int64_t*>( dx );
+       	for(uint64_t i=0;i<n;i++)
+	{
+	    int64_t s = x[i] >> 63; 
+	    int16_t e = ( (x[i]>>52) & ((1ULL<<11)-1) ); 
+	    int64_t m = x[i] & ((1ULL<<52)-1ULL); 
+	    if(e!=0 || m!=0) { m = m | (1ULL<<52) ; e-=1023; } 
+	    m = (m^s) + ( s & 1ULL ) ; 
 
-	        DBG_ASSERT( e>=EXPMIN && e<=EXPMAX);
-	        uint16_t ebin = e - EXPMIN;
+	    // TODO: detect and process nan/inf
 
-	        m += msum[ebin];
+	    DBG_ASSERT( e>=EXPMIN && e<=EXPMAX );
+	    uint16_t ebin = e - EXPMIN;
+
+	    m += msum[ebin];
 
             // update carry
-            if( mcarry[ebin] != 0 ) { -- nzCarries; }
-	        mcarry[ebin] += m >> 53;
-            if( mcarry[ebin] != 0 ) { ++ nzCarries; }
+	    mcarry[ebin] += m >> 53;
 
             // set mantissa
-	        msum[ebin] = m & ((1ULL<<53)-1);	      
+	    msum[ebin] = m & ((1ULL<<53)-1);	      
 
             // update exponent range
-	        if(ebin<bmin) { bmin=ebin; }
-	        if(ebin>bmax) { bmax=ebin; }
-	    }
+	    if(ebin<bmin) { bmin=ebin; }
+	    if(ebin>bmax) { bmax=ebin; }
+	}
+	nzCarries = 0;
+	for(int i=bmin;i<=bmax;i++)
+        {
+            if( mcarry[i] != 0 ) { ++ nzCarries; }
+	}
     }
 
-    inline void addMantissasNoCarryUpdate( const IFloat64& radd )
+    inline void addMantissasNoCarryUpdate( const IFloat64T& radd )
     {
         for(uint16_t i=radd.bmin; i<=radd.bmax; i++)
         {
@@ -120,12 +123,12 @@ struct IFloat64
     			mcarry[i] = 0;
                 -- nzCarries; 
 
-	    	  	uint16_t cre = log2ui(c) + 1;
-    			c = c << (53-cre);
-    			uint16_t ebin = i+cre; 
+	    	uint16_t cre = log2ui(c) + 1;
+    		c = c << (53-cre);
+    		uint16_t ebin = i+cre; 
                 // if( ebin >= EXPRANGESIZE ) { printf("i=%d, cre=%d, ebin=%d\n",i,cre,ebin); }
-    			DBG_ASSERT( ebin < EXPRANGESIZE );
-    			int64_t m = msum[ebin] + c;
+    		DBG_ASSERT( ebin < EXPRANGESIZE );
+    		int64_t m = msum[ebin] + c;
                 if( mcarry[ebin] != 0 ) { -- nzCarries; }
 	            mcarry[ebin] += m >> 53;
                 if( mcarry[ebin] != 0 ) { ++ nzCarries; }
@@ -176,6 +179,7 @@ struct IFloat64
 
 } __attribute__((aligned(64)));
 
+using IFloat64 = IFloat64T<>;
 
 #endif // __IFloat64Common_h
 
