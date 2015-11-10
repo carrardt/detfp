@@ -44,7 +44,7 @@ double if64Sum(uint64_t n, const double * x)
 
 double if64Sum(uint64_t n, const double * x)
 {
-    F64RAdd radd;
+    IFloat64 radd;
     radd.addValues( n, x );
     radd.removeCarries();
     return radd.sumMantissas();

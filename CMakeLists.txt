@@ -1,7 +1,6 @@
 cmake_minimum_required (VERSION 2.8)
 project (IF64)
 
-find_package(OpenMP)
 find_package(MPI)
 
 set(IS64_SOURCES f64Sum.cc if64Sum.cc)
@@ -13,9 +12,13 @@ endif()
 set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c11")
 
-if (OPENMP_FOUND)
-    set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS} -fopenmp-simd")
-    set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS} -fopenmp-simd")
+set(ENABLE_OPENMP "true" CACHE BOOL "Enable OpenMP")
+if(ENABLE_OPENMP)
+	find_package(OpenMP)
+	if (OPENMP_FOUND)    
+	    set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+	    set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+	endif()
 endif()
 
 add_definitions("-mlzcnt")
