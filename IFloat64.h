@@ -7,7 +7,7 @@
 #include <x86intrin.h>
 
 #define DBG_ASSERT(x) assert(x)
-#include <stdio.h>
+//#include <iostream>
 
 static inline int log2ui(int64_t x)
 {
@@ -70,17 +70,13 @@ struct IFloat64T
 	    // add signed mantissa
 	    m += msum[ebin];
 
-            // update carry, may be negative
-	    mcarry[ebin] += m >> 53;
+	    // here after, we take care to keep negative mantissas to prevent excessive carry propagation
 
-            // set remaining mantissa (must be positive at this point)
-	    msum[ebin] = m & ((1ULL<<53)-1);
-	
-	    if( s )
-	    {
-		msum[ebin] = msum[ebin] - (1LL<<53);
-		mcarry[ebin] += 1;
-	    }
+            // update carry, may be negative.
+	    mcarry[ebin] += ( m >> 53 ) - s;
+
+            // set remaining mantissa
+	    msum[ebin] = ( m & ((1ULL<<53)-1) ) - ( s & (1LL<<53) );
 
             // update exponent range
 	    if(ebin<bmin) { bmin=ebin; }
@@ -112,6 +108,7 @@ struct IFloat64T
     template<typename StreamT>
     inline void print(StreamT& os)
     {
+	os << "--- bmin="<<bmin<<", bmax="<<bmax<<" ---\n";
         for(int i=bmin;i<=bmax;i++)
 	    {
 	        int64_t m = msum[i];
@@ -138,12 +135,12 @@ struct IFloat64T
     			int64_t m = msum[ebin] + c;
 	            	mcarry[ebin] += m >> 53;
     			msum[ebin] = m & ((1ULL<<53)-1);
+
 			if( mcarry[ebin] < 0 )
 			{
 				mcarry[ebin] += 1;
 				msum[ebin] -= (1LL<<53);
 			}
-
     			bmax = (ebin>bmax) ? ebin : bmax ;
     		}
     	}
@@ -154,30 +151,39 @@ struct IFloat64T
 	    for(int i=bmin;i<=bmax;i++)
 	    {
 	        int64_t m = msum[i];
-	        msum[i] = 0;
-	        uint16_t mre = (m==0) ? 0 : ( 52 - log2ui(m) ) ;
-	        DBG_ASSERT( i >= mre );
-	        uint16_t ebin = i - mre;
-	        m = msum[ebin] + (m << mre);
-	        mcarry[ebin] += m >> 53;
-	        msum[ebin] = m & ((1ULL<<53)-1);
-                if( mcarry[ebin] < 0 )
-                {
-                	mcarry[ebin] += 1;
-                        msum[ebin] -= (1LL<<53);
-                }
-	        bmin = (ebin<bmin) ? ebin : bmin ;
+		if( m != 0 )
+		{
+	        	msum[i] = 0;
+	        	//uint16_t mre = (m==0) ? 0 : ( 52 - log2ui(m) ) ;
+			int mre = log2ui(m) ;
+			DBG_ASSERT( mre >= 0 );
+			mre = 52 - mre;
+	        	DBG_ASSERT( i >= mre );
+	        	uint16_t ebin = i - mre;
+	        	m = msum[ebin] + (m << mre);
+	        	mcarry[ebin] += m >> 53;
+	        	msum[ebin] = m & ((1ULL<<53)-1);
+                	if( mcarry[ebin] < 0 )
+                	{
+                		mcarry[ebin] += 1;
+                        	msum[ebin] -= (1LL<<53);
+                	}
+	        	bmin = (ebin<bmin) ? ebin : bmin ;
+		}
 	    }
     }
 
     inline void removeCarries()
     {
         int nIteration = 0;
+	// print(std::cout);
         while( nzCarries() > 0 )
         {
             ++ nIteration;
             distributeCarries();
+	    // print(std::cout);
             distributeMantissas();
+	    // print(std::cout);
         }
     }
 
