@@ -32,7 +32,7 @@ double if64Sum(uint64_t n, const double * x)
     }
 
     // mantissa normalization
-    all_radd.computeCarriesFromMantissas();
+//    all_radd.computeCarriesFromMantissas();
     all_radd.removeCarries();
 
 	//printf("All after %d iterations: bmin=%d, bmax=%d, range=%d\n",nIteration,all_bmin,all_bmax,all_bmax-all_bmin);
