@@ -29,5 +29,8 @@ add_library(if64 ${IS64_SOURCES})
 add_executable(benchmark benchmark.cc)
 target_link_libraries(benchmark if64)
 
+add_executable(debugadd debugadd.cc)
+target_link_libraries(debugadd if64)
+
 add_executable(testlzcnt testlzcnt.c)
 
