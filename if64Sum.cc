@@ -48,9 +48,7 @@ double if64Sum(uint64_t n, const double * x)
 {
     IFloat64 radd;
     radd.addValues( n, x );
-    radd.print(std::cout);
     radd.removeCarries();
-    radd.print(std::cout);
     return radd.sumMantissas();
 }
 

@@ -75,6 +75,12 @@ struct IFloat64T
 
             // set remaining mantissa (must be positive at this point)
 	    msum[ebin] = m & ((1ULL<<53)-1);
+	
+	    if( s )
+	    {
+		msum[ebin] = msum[ebin] - (1LL<<53);
+		mcarry[ebin] += 1;
+	    }
 
             // update exponent range
 	    if(ebin<bmin) { bmin=ebin; }
@@ -124,7 +130,6 @@ struct IFloat64T
     		if( c != 0 )
     		{
     			mcarry[i] = 0;
-
 	    		uint16_t cre = log2ui(c) + 1;
     			c = c << (53-cre);
     			uint16_t ebin = i+cre; 
@@ -133,10 +138,12 @@ struct IFloat64T
     			int64_t m = msum[ebin] + c;
 	            	mcarry[ebin] += m >> 53;
     			msum[ebin] = m & ((1ULL<<53)-1);
-			if(ebin>bmax)
+			if( mcarry[ebin] < 0 )
 			{
-				printf("i=%d, cre=%d, bmax=%d->%d, mcarry[%d]=\n",i,cre,bmax,ebin);
+				mcarry[ebin] += 1;
+				msum[ebin] -= (1LL<<53);
 			}
+
     			bmax = (ebin>bmax) ? ebin : bmax ;
     		}
     	}
@@ -154,6 +161,11 @@ struct IFloat64T
 	        m = msum[ebin] + (m << mre);
 	        mcarry[ebin] += m >> 53;
 	        msum[ebin] = m & ((1ULL<<53)-1);
+                if( mcarry[ebin] < 0 )
+                {
+                	mcarry[ebin] += 1;
+                        msum[ebin] -= (1LL<<53);
+                }
 	        bmin = (ebin<bmin) ? ebin : bmin ;
 	    }
     }
