@@ -28,7 +28,7 @@ static inline void decodeFloat64(const double * px, int64_t& s, int16_t& e, int6
 }
 
 template<typename TestFuncT,typename AssessFuncT>
-static inline void runTest( uint64_t n, double* x, const char* methodName, double &Tref, TestFuncT func, AssessFuncT assess )
+static inline bool runTest( uint64_t n, double* x, const char* methodName, double &Tref, TestFuncT func, AssessFuncT assess )
 {
 	double t0 = wallclock();
 	double r = func( n, x );
@@ -39,6 +39,7 @@ static inline void runTest( uint64_t n, double* x, const char* methodName, doubl
 	if(Tref==0.0) { Tref = t; }
 	bool resultOk = assess( r );
 	printf("%-20s : time=%03.4lf, sum=%20.20lf, sign=%ld, exp=%d, mantissa=%017ld %c \tspeedup=%.2lg\n",methodName,t,r,s,e,m, resultOk?' ':'X', Tref/t );
+	return resultOk;
 }
 
 int main(int argc, char* argv[])
@@ -92,7 +93,10 @@ int main(int argc, char* argv[])
 	runTest(N,x,"SumNoOpt",Tref,f64SumNoOpt, [sumNoOpt](double r)->bool { return r==sumNoOpt; } );
 	runTest(N,x,"Sum",Tref,f64Sum, [sumOpt](double r)->bool { return r==sumOpt; } );
 	runTest(N,x,"SumI128",Tref,f64Sumi128, [sumi128](double r)->bool { return r==sumi128; } );
-	runTest(N,x,"SumIF",Tref,if64Sum, [sumif](double r)->bool { return r==sumif; } );
+	bool invresult = runTest(N,x,"SumIF",Tref,if64Sum, [sumif](double r)->bool { return r==sumif; } );
 
-	return 0;
+	std::cout<<"\n";
+
+	return invresult ? 0 : 1;
 }
+

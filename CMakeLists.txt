@@ -1,23 +1,29 @@
-cmake_minimum_required (VERSION 2.8)
+cmake_minimum_required (VERSION 3.0)
 project (IF64)
 
-find_package(MPI)
-
-set(IS64_SOURCES f64Sum.cc if64Sum.cc)
-
-if (MPI_FOUND)
-	set(IS64_SOURCES ${IS64_SOURCES} if64AllReduceSum.cc)
-endif()
+set(ENABLE_OPENMP "true" CACHE BOOL "Enable OpenMP")
+set(ENABLE_MPI "true" CACHE BOOL "Enable MPI")
 
 set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c11")
 
-set(ENABLE_OPENMP "true" CACHE BOOL "Enable OpenMP")
+set(IS64_SOURCES f64Sum.cc if64Sum.cc)
+
 if(ENABLE_OPENMP)
 	find_package(OpenMP)
 	if (OPENMP_FOUND)    
 	    set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
 	    set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+	endif()
+endif()
+
+if(ENABLE_MPI)
+	find_package(MPI)
+	if (MPI_FOUND)
+		set(IS64_SOURCES ${IS64_SOURCES} if64AllReduceSum.cc)
+		set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${MPI_C_COMPILE_FLAGS}")
+		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${MPI_CXX_COMPILE_FLAGS}")
+		set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${MPI_CXX_LINK_FLAGS}")
 	endif()
 endif()
 
