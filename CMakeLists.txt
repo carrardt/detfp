@@ -7,7 +7,7 @@ set(ENABLE_MPI "true" CACHE BOOL "Enable MPI")
 set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c11")
 
-set(IS64_SOURCES f64Sum.cc if64Sum.cc)
+set(IS64_SOURCES src/f64Sum.cc src/if64Sum.cc)
 
 if(ENABLE_OPENMP)
 	find_package(OpenMP)
@@ -20,7 +20,7 @@ endif()
 if(ENABLE_MPI)
 	find_package(MPI)
 	if (MPI_FOUND)
-		set(IS64_SOURCES ${IS64_SOURCES} if64AllReduceSum.cc)
+		set(IS64_SOURCES ${IS64_SOURCES} src/if64AllReduceSum.cc)
 		set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${MPI_C_COMPILE_FLAGS}")
 		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${MPI_CXX_COMPILE_FLAGS}")
 		set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${MPI_CXX_LINK_FLAGS}")
@@ -32,11 +32,11 @@ add_definitions("-mlzcnt")
 
 add_library(if64 ${IS64_SOURCES})
 
-add_executable(benchmark benchmark.cc)
+add_executable(benchmark src/benchmark.cc)
 target_link_libraries(benchmark if64)
 
-add_executable(debugadd debugadd.cc)
+add_executable(debugadd src/debugadd.cc)
 target_link_libraries(debugadd if64)
 
-add_executable(testlzcnt testlzcnt.c)
+add_executable(testlzcnt src/testlzcnt.c)
 
