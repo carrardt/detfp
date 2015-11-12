@@ -58,20 +58,49 @@ struct IFloat64T
 
     inline void addValues(uint64_t n, const double * dx)
     {
+       	const int64_t * x = reinterpret_cast<const int64_t*>( dx );
 #ifdef _OPENMP
 #   	pragma omp parallel
     	{
 		IFloat64T radd;
-		const int tid = omp_get_thread_num();
-		const int nthreads = omp_get_num_threads();
-		const uint64_t start = (n*tid)/nthreads;
-		const uint64_t end = (n*(tid+1))/nthreads;
-		radd.addValuesSeq( end-start , dx+start );
-		radd.removeCarries();
+#		pragma omp for
+       		for(uint64_t i=0;i<n;i++)
+		{
+		    int64_t s = x[i] >> 63; 
+		    int16_t e = ( (x[i]>>52) & ((1ULL<<11)-1) ); 
+		    int64_t m = x[i] & ((1ULL<<52)-1ULL);
+		    if(e!=0) { m |= (1ULL<<52); e-=1023; } // if not denormalized
+		    m = (m^s) - s ; // make signed normalized mantissa (-1)^s * 1,m
+
+		    // TODO: detect and process nan/inf
+		    DBG_ASSERT( e>=EXPMIN && e<=EXPMAX );
+		    uint16_t ebin = e - EXPMIN;
+
+		    // add signed mantissa
+		    m += msum[ebin];
+
+		    // update carry, may be negative.
+		    mcarry[ebin] += m >> 53;
+
+		    // set remaining mantissa
+		    msum[ebin] = m & ((1ULL<<53)-1) ;
+
+		    // update exponent range
+		    if(ebin<bmin) { bmin=ebin; }
+		    if(ebin>bmax) { bmax=ebin; }
+		}
 #       	pragma omp critical
 		{
-		    addMantissasNoCarryUpdate( radd );
-#           	    pragma omp flush(msum,bmin,bmax)
+			for(uint16_t i=radd.bmin; i<=radd.bmax; i++)
+			{
+			    int64_t m = msum[i] + radd.msum[i];
+			    mcarry[i] += radd.mcarry[i];
+		    	    mcarry[i] += m >> 53;
+			    msum[i] = m & ((1ULL<<53)-1) ;
+			}
+			if( radd.bmin < bmin ) bmin = radd.bmin;
+			if( radd.bmax > bmax ) bmax = radd.bmax;
+#           	    	pragma omp flush
 		}
 	}
 #else
@@ -97,8 +126,6 @@ struct IFloat64T
 	    // add signed mantissa
 	    m += msum[ebin];
 
-	    // here after, we take care to keep negative mantissas to prevent excessive carry propagation
-
             // update carry, may be negative.
 	    mcarry[ebin] += m >> 53;
 
@@ -109,27 +136,6 @@ struct IFloat64T
 	    if(ebin<bmin) { bmin=ebin; }
 	    if(ebin>bmax) { bmax=ebin; }
 	}
-    }
-
-    inline void addMantissasNoCarryUpdate( const IFloat64T& radd )
-    {
-        for(uint16_t i=radd.bmin; i<=radd.bmax; i++)
-        {
-            msum[i] += radd.msum[i];
-        }
-        if( radd.bmin < bmin ) bmin = radd.bmin;
-        if( radd.bmax > bmax ) bmax = radd.bmax;
-    }
-
-    // overwrites carry content
-    inline void computeCarriesFromMantissas()
-    {
-        for(int i=bmin;i<=bmax;i++)
-        {
-            int64_t m = msum[i];
-            mcarry[i] = (m >> 53);
-            msum[i] = m & ((1ULL<<53)-1);
-        }
     }
     
     template<typename StreamT>
