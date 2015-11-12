@@ -9,6 +9,10 @@
 #define DBG_ASSERT(x) assert(x)
 //#include <iostream>
 
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
 static inline int log2ui(int64_t x)
 {
 	return __lzcnt64( (x<0) ? -x : x );
@@ -53,6 +57,29 @@ struct IFloat64T
     }
 
     inline void addValues(uint64_t n, const double * dx)
+    {
+#ifdef _OPENMP
+#   	pragma omp parallel
+    	{
+		IFloat64T radd;
+		const int tid = omp_get_thread_num();
+		const int nthreads = omp_get_num_threads();
+		const uint64_t start = (n*tid)/nthreads;
+		const uint64_t end = (n*(tid+1))/nthreads;
+		radd.addValuesSeq( end-start , dx+start );
+		radd.removeCarries();
+#       	pragma omp critical
+		{
+		    addMantissasNoCarryUpdate( radd );
+#           	    pragma omp flush(msum,bmin,bmax)
+		}
+	}
+#else
+	addValuesSeq( n , dx );
+#endif
+    }
+
+    inline void addValuesSeq(uint64_t n, const double * dx)
     {
        	const int64_t * x = reinterpret_cast<const int64_t*>( dx );
        	for(uint64_t i=0;i<n;i++)
@@ -159,21 +186,22 @@ struct IFloat64T
 
     inline void distributeMantissas()
     {
-	    for(int i=bmin;i<=bmax;i++)
-	    {
-	        int64_t m = msum[i];
+	for(int i=bmin;i<=bmax;i++)
+	{
+		int64_t m = msum[i];
 		int mre = 52 - log2ui(m) ;
 		if( m!=0 && mre!=0 )
 		{
-	        	msum[i] = 0;
-	        	DBG_ASSERT( i >= mre );
-	        	uint16_t ebin = i - mre;
-	        	m = msum[ebin] + (m << mre);
-	        	mcarry[ebin] += m >> 53;
-	        	msum[ebin] = m & ((1ULL<<53)-1);
-	        	if(ebin<bmin) bmin = ebin ;
+			msum[i] = 0;
+			DBG_ASSERT( i >= mre );
+			uint16_t ebin = i - mre;
+			m = msum[ebin] + (m << mre);
+			mcarry[ebin] += m >> 53;
+			msum[ebin] = m & ((1ULL<<53)-1);
+			if(ebin<bmin) bmin = ebin ;
 		}
-	    }
+	}
+	while( bmax>bmin && msum[bmax]==0 && mcarry[bmax]==0 ) --bmax;
     }
 
     inline void removeCarries()
@@ -190,12 +218,23 @@ struct IFloat64T
 
     inline double sumMantissas()
     {
-        double r = 0.0;
+	int64_t mantissaSum = 0;
         for(int i=bmin;i<=bmax;i++)
         {
-            r += exp2(i+EXPMIN-52) *  ((double)msum[i]);
+	    mantissaSum = (mantissaSum>>1) + msum[i];
         }
-        return r;
+        return exp2(bmax+EXPMIN-52) * ((double)mantissaSum);
+    }
+
+    inline bool operator == (const IFloat64T& rhs)
+    {
+	if( bmin != rhs.bmin ) return false;
+	if( bmax != rhs.bmax ) return false;
+	for(int i=bmin;i<=bmax;i++)
+	{
+		if( msum[i]!=rhs.msum[i] || mcarry[i]!=rhs.mcarry[i] ) return false;
+	}
+	return true;
     }
 
 } __attribute__((aligned(64)));

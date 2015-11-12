@@ -75,14 +75,16 @@ int main(int argc, char* argv[])
 	{  double r = f64Sum( N, x ); if(r==0.0) std::cout<<"\n"; }
 
 	double Tref=0.0, sumNoOpt=0.0, sumOpt=0.0, sumi128=0.0, sumif=0.0;
-	runTest(N,x,"SumNoOpt",Tref,f64SumNoOpt, [&sumNoOpt](double r)->bool {sumNoOpt=r; return true;} );
-	runTest(N,x,"Sum",Tref,f64Sum, [&sumOpt](double r)->bool {sumOpt=r; return true;} );
-	runTest(N,x,"SumI128",Tref,f64Sumi128, [&sumi128](double r)->bool {sumi128=r; return true;} );
-	runTest(N,x,"SumIF",Tref,if64Sum, [&sumif](double r)->bool {sumif=r; return true;} );
+	IFloat64 sumData1, sumData2;
+
+	runTest(N,x,"SumNoOpt",Tref,f64SumNoOpt, [&sumNoOpt](double r) {sumNoOpt=r; return true;} );
+	runTest(N,x,"Sum",Tref,f64Sum, [&sumOpt](double r) {sumOpt=r; return true;} );
+	runTest(N,x,"SumI128",Tref,f64Sumi128, [&sumi128](double r) {sumi128=r; return true;} );
+	runTest(N,x,"SumIF",Tref, [&sumData1](uint64_t n,const double* x) { return if64Sum(n,x,sumData1); } , [&sumif](double r) {sumif=r; return true;} );
 	runTest(N,x,"sort+Sum",Tref,
 		[](uint64_t N, double* x) -> double
 		{
-			std::sort( x, x+N, [](double a, double b) -> bool { return fabs(a)<fabs(b); } );
+			std::sort( x, x+N, [](double a, double b) { return fabs(a)<fabs(b); } );
 			return f64Sum(N,x);
 		}
 		, [](double)->bool{return true;}
@@ -90,11 +92,24 @@ int main(int argc, char* argv[])
 
 	printf("---- after sort ----\n");
 
-	runTest(N,x,"SumNoOpt",Tref,f64SumNoOpt, [sumNoOpt](double r)->bool { return r==sumNoOpt; } );
-	runTest(N,x,"Sum",Tref,f64Sum, [sumOpt](double r)->bool { return r==sumOpt; } );
-	runTest(N,x,"SumI128",Tref,f64Sumi128, [sumi128](double r)->bool { return r==sumi128; } );
-	bool invresult = runTest(N,x,"SumIF",Tref,if64Sum, [sumif](double r)->bool { return r==sumif; } );
+	runTest(N,x,"SumNoOpt",Tref,f64SumNoOpt, [sumNoOpt](double r) { return r==sumNoOpt; } );
+	runTest(N,x,"Sum",Tref,f64Sum, [sumOpt](double r) { return r==sumOpt; } );
+	runTest(N,x,"SumI128",Tref,f64Sumi128, [sumi128](double r) { return r==sumi128; } );
+	bool invresult = runTest(N,x,"SumIF",Tref, [&sumData2](uint64_t n,const double* x) { return if64Sum(n,x,sumData2); }, [sumif](double r) { return r==sumif; } );
 
+	if( !invresult )
+	{
+		int bmin = std::min( sumData1.bmin , sumData2.bmin );
+		int bmax = std::max( sumData1.bmax , sumData2.bmax );
+		for(int i=bmin; i<=bmax; i++)
+		{
+			std::cout<<i<<" : ";
+			if( i<sumData1.bmin || i> sumData1.bmax ) std::cout<<"X ";
+			else std::cout<< exp2(-52) * (double)sumData1.msum[i] << " ";
+			if( i<sumData2.bmin || i> sumData2.bmax ) std::cout<<"X\n";
+			else std::cout<< exp2(-52) * (double)sumData2.msum[i] << "\n";
+		}
+	}
 	std::cout<<"\n";
 
 	return invresult ? 0 : 1;
