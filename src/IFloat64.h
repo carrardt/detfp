@@ -77,17 +77,17 @@ struct IFloat64T
 		    uint16_t ebin = e - EXPMIN;
 
 		    // add signed mantissa
-		    m += msum[ebin];
+		    m += radd.msum[ebin];
 
 		    // update carry, may be negative.
-		    mcarry[ebin] += m >> 53;
+		    radd.mcarry[ebin] += m >> 53;
 
 		    // set remaining mantissa
-		    msum[ebin] = m & ((1ULL<<53)-1) ;
+		    radd.msum[ebin] = m & ((1ULL<<53)-1) ;
 
 		    // update exponent range
-		    if(ebin<bmin) { bmin=ebin; }
-		    if(ebin>bmax) { bmax=ebin; }
+		    if(ebin<radd.bmin) { radd.bmin=ebin; }
+		    if(ebin>radd.bmax) { radd.bmax=ebin; }
 		}
 #       	pragma omp critical
 		{
