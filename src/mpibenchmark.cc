@@ -5,6 +5,7 @@
 
 #include "f64math.h"
 #include "if64math.h"
+#include "if64mpi.h"
 
 #include <algorithm>
 #include <iostream>
@@ -42,32 +43,30 @@ static inline bool runTest( uint64_t n, double* x, const char* methodName, doubl
 	return resultOk;
 }
 
-static void printSumDataDiff(const IFloat64& sumData1, const IFloat64& sumData2)
-{
-	int bmin = std::min( sumData1.bmin , sumData2.bmin );
-	int bmax = std::max( sumData1.bmax , sumData2.bmax );
-	for(int i=bmin; i<=bmax; i++)
-	{
-		if( i<sumData1.bmin || i>sumData1.bmax || i<sumData2.bmin || i>sumData2.bmax || sumData1.msum[i]!=sumData2.msum[i] || sumData1.mcarry[i]!=sumData2.mcarry[i] )
-		{
-			std::cout<<i<<" : ";
-			if( i<sumData1.bmin || i> sumData1.bmax ) std::cout<<"C=X/M=X ";
-			else std::cout<<"C="<<sumData1.mcarry[i]<<"/M="<<exp2(-52) * (double)sumData1.msum[i] << " ";
-			if( i<sumData2.bmin || i> sumData2.bmax ) std::cout<<"C=X/M=X\n";
-			else std::cout<<"C="<<sumData2.mcarry[i]<<"/M="<<exp2(-52) * (double)sumData2.msum[i] << "\n";
-		}
-	}
-}
-
 int main(int argc, char* argv[])
 {
 	uint64_t N = atol(argv[1]);
 	long seed = atol(argv[2]);
 	if( N < 1 ) { return 0; }
 
+
+	MPI_Init(&argc,&argv);
+	int rank = 0;
+	int nproc = 1;
+	MPI_Comm_rank( MPI_COMM_WORLD, &rank );
+	MPI_Comm_size( MPI_COMM_WORLD, &nproc );
+	std::cout<<"MPI: P#"<<rank<<std::endl;
+
+	MPI_Barrier(MPI_COMM_WORLD);
+	if(rank==0)
+	{
+		std::cout<<"N="<<N<<", seed="<<seed<<", NbProc="<<nproc<<std::endl;
+	}
+
 	double* x = (double*)malloc(N*sizeof(double));
 	if( seed >= 0 )
 	{
+		seed += rank;
 		srand48(seed);
 		for(uint64_t i=0;i<N;i++)
 		{
@@ -86,7 +85,6 @@ int main(int argc, char* argv[])
 		}		
 	}
 	
-	std::cout<<"N="<<N<<", seed="<<seed<<std::endl;
 
 	// openmp warm-up
 	{  double r = f64Sum( N, x ); if(r==0.0) std::cout<<"\n"; }
@@ -94,27 +92,55 @@ int main(int argc, char* argv[])
 	double Tref=0.0, sumNoOpt=0.0, sumOpt=0.0, sumi128=0.0, sumif=0.0;
 	//IFloat64 sumData1, sumData2;
 
-	runTest(N,x,"SumNoOpt",Tref,f64SumNoOpt, [&sumNoOpt](double r) {sumNoOpt=r; return true;} );
-	runTest(N,x,"Sum",Tref,f64Sum, [&sumOpt](double r) {sumOpt=r; return true;} );
-	runTest(N,x,"SumI128",Tref,f64Sumi128, [&sumi128](double r) {sumi128=r; return true;} );
+	auto mpiSumNoOpt = [] (uint64_t n,const double* x)
+		{
+			double r = f64SumNoOpt(n,x);
+			MPI_Allreduce( MPI_IN_PLACE, &r , 1 , MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD );
+			return r;
+		};
+
+	auto mpiSum = [] (uint64_t n,const double* x)
+		{
+			double r = f64Sum(n,x);
+			MPI_Allreduce( MPI_IN_PLACE, &r , 1 , MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD );
+			return r;
+		};
+
+	auto mpiSumI128 = [] (uint64_t n,const double* x)
+		{
+			double r = f64Sumi128(n,x);
+			MPI_Allreduce( MPI_IN_PLACE, &r , 1 , MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+			return r;
+		};
+
+
+	auto mpiSumIF = [] (uint64_t n,const double* x)
+		{
+			double r = if64AllReduceSum(n,x,MPI_COMM_WORLD);
+			return r;
+		};
+
+	runTest(N,x,"SumNoOpt",Tref, mpiSumNoOpt , [&sumNoOpt](double r) {sumNoOpt=r; return true;} );
+	runTest(N,x,"Sum",Tref, mpiSum, [&sumOpt](double r) {sumOpt=r; return true;} );
+	runTest(N,x,"SumI128",Tref, mpiSumI128 , [&sumi128](double r) {sumi128=r; return true;} );
 	//runTest(N,x,"SumIF",Tref, [&sumData1](uint64_t n,const double* x) { return if64Sum(n,x,sumData1); } , [&sumif](double r) {sumif=r; return true;} );
-	runTest(N,x,"SumIF",Tref, if64Sum, [&sumif](double r) {sumif=r; return true;} );
+	runTest(N,x,"SumIF",Tref, mpiSumIF, [&sumif](double r) {sumif=r; return true;} );
 	runTest(N,x,"sort+Sum",Tref,
-		[](uint64_t N, double* x) -> double
+		[mpiSum](uint64_t N, double* x) -> double
 		{
 			std::sort( x, x+N, [](double a, double b) { return fabs(a)<fabs(b); } );
-			return f64Sum(N,x);
+			return mpiSum(N,x);
 		}
-		, [](double)->bool{return true;}
+		, [](double) {return true;}
 	);
 
 	printf("---- after sort ----\n");
 
-	runTest(N,x,"SumNoOpt",Tref,f64SumNoOpt, [sumNoOpt](double r) { return r==sumNoOpt; } );
-	runTest(N,x,"Sum",Tref,f64Sum, [sumOpt](double r) { return r==sumOpt; } );
-	runTest(N,x,"SumI128",Tref,f64Sumi128, [sumi128](double r) { return r==sumi128; } );
+	runTest(N,x,"SumNoOpt",Tref, mpiSumNoOpt , [sumNoOpt](double r) { return r==sumNoOpt; } );
+	runTest(N,x,"Sum",Tref, mpiSum , [sumOpt](double r) { return r==sumOpt; } );
+	runTest(N,x,"SumI128",Tref, mpiSumI128, [sumi128](double r) { return r==sumi128; } );
 	//bool invresult = runTest(N,x,"SumIF",Tref, [&sumData2](uint64_t n,const double* x) { return if64Sum(n,x,sumData2); }, [sumif](double r) { return r==sumif; } );
-	bool invresult = runTest(N,x,"SumIF",Tref, if64Sum, [sumif](double r) { return r==sumif; } );
+	bool invresult = runTest(N,x,"SumIF",Tref, mpiSumIF, [sumif](double r) { return r==sumif; } );
 /*
 	if( !invresult )
 	{

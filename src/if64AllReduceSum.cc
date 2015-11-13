@@ -1,19 +1,18 @@
 #include <mpi.h>
+#include <assert.h>
 #include "IFloat64.h"
 
 double if64AllReduceSum(uint64_t n, const double * x, MPI_Comm comm)
 {
-    IFloat64 radd;
-    radd.addValues( end-start , x+start );
-    radd.removeCarries();
+    assert( sizeof(int64_t) == sizeof(long long int) );
 
-    MPI_Allreduce( MPI_IN_PLACE, radd.msum , n , MPI_LONG, MPI_SUM, comm );
+    IFloat64 tmp;
+    tmp.addValues(n,x);
+    tmp.removeCarries();
 
-    // mantissa normalization
-    radd.computeCarriesFromMantissas();
-    radd.removeCarries();
+    MPI_Allreduce( MPI_IN_PLACE, tmp.msum , n , MPI_LONG_LONG_INT, MPI_SUM, comm );
 
-    // somme des mantisses
-    return radd.sumMantissas();
+    tmp.removeCarries();
+    return tmp.sumMantissas();
 }
 

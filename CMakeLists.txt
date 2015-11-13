@@ -24,6 +24,9 @@ if(ENABLE_MPI)
 		set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${MPI_C_COMPILE_FLAGS}")
 		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${MPI_CXX_COMPILE_FLAGS}")
 		set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${MPI_CXX_LINK_FLAGS}")
+		include_directories(${MPI_INCLUDE_PATH})
+		message("MPI CXX FLAGS = ${MPI_CXX_COMPILE_FLAGS}")
+		message("MPI_INCLUDE_PATH = ${MPI_INCLUDE_PATH}")
 	endif()
 endif()
 
@@ -39,4 +42,9 @@ add_executable(debugadd src/debugadd.cc)
 target_link_libraries(debugadd if64)
 
 add_executable(testlzcnt src/testlzcnt.c)
+
+if (MPI_FOUND)
+	add_executable(mpibenchmark src/mpibenchmark.cc)
+	target_link_libraries(mpibenchmark if64 ${MPI_LIBRARIES})
+endif()
 
