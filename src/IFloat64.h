@@ -60,10 +60,13 @@ struct IFloat64T
     {
        	const int64_t * x = reinterpret_cast<const int64_t*>( dx );
 #ifdef _OPENMP
+	const int maxThreads = omp_get_max_threads();
+	IFloat64T sharedBuf[maxThreads];
 #   	pragma omp parallel
     	{
-		IFloat64T radd;
-#		pragma omp for
+		IFloat64T privBuf;
+		const int tid = omp_get_thread_num(); 
+#		pragma omp for nowait
        		for(uint64_t i=0;i<n;i++)
 		{
 		    int64_t s = x[i] >> 63; 
@@ -77,40 +80,45 @@ struct IFloat64T
 		    uint16_t ebin = e - EXPMIN;
 
 		    // add signed mantissa
-		    m += radd.msum[ebin];
+		    m += privBuf.msum[ebin];
 
 		    // update carry, may be negative.
-		    radd.mcarry[ebin] += m >> 53;
+		    privBuf.mcarry[ebin] += m >> 53;
 
 		    // set remaining mantissa
-		    radd.msum[ebin] = m & ((1ULL<<53)-1) ;
+		    privBuf.msum[ebin] = m & ((1ULL<<53)-1) ;
 
 		    // update exponent range
-		    if(ebin<radd.bmin) { radd.bmin=ebin; }
-		    if(ebin>radd.bmax) { radd.bmax=ebin; }
+		    if(ebin<privBuf.bmin) { privBuf.bmin=ebin; }
+		    if(ebin>privBuf.bmax) { privBuf.bmax=ebin; }
 		}
-#       	pragma omp critical
+		for(unsigned int i=privBuf.bmin; i<=privBuf.bmax; i++)
 		{
-			for(uint16_t i=radd.bmin; i<=radd.bmax; i++)
+			sharedBuf[tid].msum[i] = privBuf.msum[i];
+			sharedBuf[tid].mcarry[i] = privBuf.mcarry[i];
+		}
+		sharedBuf[tid].bmin = privBuf.bmin;
+		sharedBuf[tid].bmax = privBuf.bmax;
+//#		pragma omp flush
+#		pragma omp barrier
+		for(unsigned int t=0;t<maxThreads;t++)
+		{
+#			pragma omp for
+			for(unsigned int i=sharedBuf[t].bmin; i<=sharedBuf[t].bmax; i++)
 			{
-			    int64_t m = msum[i] + radd.msum[i];
-			    mcarry[i] += radd.mcarry[i];
-		    	    mcarry[i] += m >> 53;
-			    msum[i] = m & ((1ULL<<53)-1) ;
+				int64_t m = msum[i] + sharedBuf[t].msum[i];
+				mcarry[i] += sharedBuf[t].mcarry[i];
+				mcarry[i] += m >> 53;
+				msum[i] = m & ((1ULL<<53)-1) ;
 			}
-			if( radd.bmin < bmin ) bmin = radd.bmin;
-			if( radd.bmax > bmax ) bmax = radd.bmax;
-#           	    	pragma omp flush
+#			pragma omp single
+			{
+				if( sharedBuf[t].bmin < bmin ) bmin = sharedBuf[t].bmin;
+				if( sharedBuf[t].bmax > bmax ) bmax = sharedBuf[t].bmax;
+			}
 		}
 	}
 #else
-	addValuesSeq( n , dx );
-#endif
-    }
-
-    inline void addValuesSeq(uint64_t n, const double * dx)
-    {
-       	const int64_t * x = reinterpret_cast<const int64_t*>( dx );
        	for(uint64_t i=0;i<n;i++)
 	{
 	    int64_t s = x[i] >> 63; 
@@ -136,8 +144,9 @@ struct IFloat64T
 	    if(ebin<bmin) { bmin=ebin; }
 	    if(ebin>bmax) { bmax=ebin; }
 	}
+#endif
     }
-    
+   
     template<typename StreamT>
     inline void print(StreamT& os)
     {

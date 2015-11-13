@@ -7,7 +7,7 @@ set(ENABLE_MPI "true" CACHE BOOL "Enable MPI")
 set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c11")
 
-set(IS64_SOURCES src/f64Sum.cc)
+set(IS64_SOURCES src/f64Sum.cc src/if64Sum.cc)
 
 if(ENABLE_OPENMP)
 	find_package(OpenMP)
