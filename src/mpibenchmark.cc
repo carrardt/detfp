@@ -45,8 +45,11 @@ static inline bool runTest( uint64_t n, double* x, const char* methodName, doubl
 
 int main(int argc, char* argv[])
 {
+	if( argc < 4 ) return 1;
+
 	uint64_t N = atol(argv[1]);
 	long seed = atol(argv[2]);
+	long role = atol(argv[3]);
 	if( N < 1 ) { return 0; }
 
 
@@ -66,7 +69,7 @@ int main(int argc, char* argv[])
 	double* x = (double*)malloc(N*sizeof(double));
 	if( seed >= 0 )
 	{
-		seed += rank;
+		seed += (rank+role)%nproc;
 		srand48(seed);
 		for(uint64_t i=0;i<N;i++)
 		{
@@ -113,18 +116,25 @@ int main(int argc, char* argv[])
 			return r;
 		};
 
-
 	auto mpiSumIF = [] (uint64_t n,const double* x)
 		{
-			double r = if64AllReduceSum(n,x,MPI_COMM_WORLD);
-			return r;
+			return if64AllReduceSum_Sum(n,x,MPI_COMM_WORLD);
 		};
+
+	auto mpiSumIF2 = [] (uint64_t n, double* x)
+		{
+			if64AllReduceSum(n,x,MPI_COMM_WORLD);
+			return if64Sum(n,x);
+		};
+
+	bool testOK = false;
 
 	runTest(N,x,"SumNoOpt",Tref, mpiSumNoOpt , [&sumNoOpt](double r) {sumNoOpt=r; return true;} );
 	runTest(N,x,"Sum",Tref, mpiSum, [&sumOpt](double r) {sumOpt=r; return true;} );
 	runTest(N,x,"SumI128",Tref, mpiSumI128 , [&sumi128](double r) {sumi128=r; return true;} );
-	//runTest(N,x,"SumIF",Tref, [&sumData1](uint64_t n,const double* x) { return if64Sum(n,x,sumData1); } , [&sumif](double r) {sumif=r; return true;} );
 	runTest(N,x,"SumIF",Tref, mpiSumIF, [&sumif](double r) {sumif=r; return true;} );
+	testOK = runTest(N,x,"SumIF2",Tref, mpiSumIF2, [sumif](double r) {return sumif==r;} );
+	if( ! testOK ) return 1;
 	runTest(N,x,"sort+Sum",Tref,
 		[mpiSum](uint64_t N, double* x) -> double
 		{
@@ -139,16 +149,12 @@ int main(int argc, char* argv[])
 	runTest(N,x,"SumNoOpt",Tref, mpiSumNoOpt , [sumNoOpt](double r) { return r==sumNoOpt; } );
 	runTest(N,x,"Sum",Tref, mpiSum , [sumOpt](double r) { return r==sumOpt; } );
 	runTest(N,x,"SumI128",Tref, mpiSumI128, [sumi128](double r) { return r==sumi128; } );
-	//bool invresult = runTest(N,x,"SumIF",Tref, [&sumData2](uint64_t n,const double* x) { return if64Sum(n,x,sumData2); }, [sumif](double r) { return r==sumif; } );
-	bool invresult = runTest(N,x,"SumIF",Tref, mpiSumIF, [sumif](double r) { return r==sumif; } );
-/*
-	if( !invresult )
-	{
-		printSumDataDiff(sumData1, sumData2);
-	}
-*/
-	std::cout<<"\n";
+	testOK = runTest(N,x,"SumIF",Tref, mpiSumIF, [sumif](double r) { return r==sumif; } );
+	if( !testOK ) return 1;
+	testOK = runTest(N,x,"SumIF2",Tref, mpiSumIF2, [sumif](double r) { return r==sumif; } );
+	if( !testOK ) return 1;
 
-	return invresult ? 0 : 1;
+	std::cout<<"\n";
+	return 0;
 }
 

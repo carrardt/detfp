@@ -18,10 +18,13 @@ static inline int log2ui(int64_t x)
 	return __lzcnt64( (x<0) ? -x : x );
 }
 
-template<int16_t EXPMIN=-128, int16_t EXPMAX=127>
+template<int16_t _EXPMIN=-128, int16_t _EXPMAX=127>
 struct IFloat64T
 {
+    static constexpr int16_t EXPMIN = _EXPMIN;
+    static constexpr int16_t EXPMAX = _EXPMAX;
     static constexpr uint16_t EXPRANGESIZE = (EXPMAX-EXPMIN+1);
+
     int64_t msum[EXPRANGESIZE];
     int32_t mcarry[EXPRANGESIZE];
     uint16_t bmin; // lowest exponent bin used
@@ -36,14 +39,15 @@ struct IFloat64T
         }
     }
 
-    inline void zeroMSum()
+    inline void reset()
     {
-        for(int i=0;i<EXPRANGESIZE;i++) msum[i]=0;
-    }
-
-    inline void zeroMCarry()
-    {
-        for(int i=0;i<EXPRANGESIZE;i++) mcarry[i]=0;
+	for(int i=bmin;i<=bmax;i++)
+        {
+            msum[i]=0;
+            mcarry[i]=0;
+        }
+ 	bmin = EXPRANGESIZE-1;
+	bmax = 0;
     }
 
     inline uint16_t nzCarries() const
