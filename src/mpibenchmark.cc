@@ -29,7 +29,7 @@ static inline void decodeFloat64(const double * px, int64_t& s, int16_t& e, int6
 }
 
 template<typename TestFuncT,typename AssessFuncT>
-static inline bool runTest( uint64_t n, double* x, const char* methodName, double &Tref, TestFuncT func, AssessFuncT assess )
+static inline bool runTest( uint64_t n, double* x, const char* methodName, double &Tref, TestFuncT func, AssessFuncT assess, bool rootProc )
 {
 	double t0 = wallclock();
 	double r = func( n, x );
@@ -39,17 +39,21 @@ static inline bool runTest( uint64_t n, double* x, const char* methodName, doubl
 	double t = t1-t0;
 	if(Tref==0.0) { Tref = t; }
 	bool resultOk = assess( r );
-	printf("%-20s : time=%03.4lf, sum=%20.20lf, sign=%ld, exp=%d, mantissa=%017ld %c \tspeedup=%.2lg\n",methodName,t,r,s,e,m, resultOk?' ':'X', Tref/t );
+	if(rootProc)
+	{
+		printf("%-20s : time=%03.4lf, sum=%20.20lf, sign=%ld, exp=%d, mantissa=%017ld %c \tspeedup=%.2lg\n",methodName,t,r,s,e,m, resultOk?' ':'X', Tref/t );
+	}
 	return resultOk;
 }
 
 int main(int argc, char* argv[])
 {
-	if( argc < 4 ) return 1;
+	if( argc < 5 ) return 1;
 
 	uint64_t N = atol(argv[1]);
 	long seed = atol(argv[2]);
 	long role = atol(argv[3]);
+	int method = atoi(argv[3]);
 	if( N < 1 ) { return 0; }
 
 
@@ -63,7 +67,7 @@ int main(int argc, char* argv[])
 	MPI_Barrier(MPI_COMM_WORLD);
 	if(rank==0)
 	{
-		std::cout<<"N="<<N<<", seed="<<seed<<", NbProc="<<nproc<<std::endl;
+		std::cout<<"N="<<N<<", seed="<<seed<<", role="<<role<<", method="<<method<<", NbProc="<<nproc<<std::endl;
 	}
 
 	double* x = (double*)malloc(N*sizeof(double));
@@ -129,32 +133,47 @@ int main(int argc, char* argv[])
 
 	bool testOK = false;
 
-	runTest(N,x,"SumNoOpt",Tref, mpiSumNoOpt , [&sumNoOpt](double r) {sumNoOpt=r; return true;} );
-	runTest(N,x,"Sum",Tref, mpiSum, [&sumOpt](double r) {sumOpt=r; return true;} );
-	runTest(N,x,"SumI128",Tref, mpiSumI128 , [&sumi128](double r) {sumi128=r; return true;} );
-	runTest(N,x,"SumIF",Tref, mpiSumIF, [&sumif](double r) {sumif=r; return true;} );
-	testOK = runTest(N,x,"SumIF2",Tref, mpiSumIF2, [sumif](double r) {return sumif==r;} );
-	if( ! testOK ) return 1;
+	runTest(N,x,"SumNoOpt",Tref, mpiSumNoOpt , [&sumNoOpt](double r) {sumNoOpt=r; return true;} , rank==0 );
+	runTest(N,x,"Sum",Tref, mpiSum, [&sumOpt](double r) {sumOpt=r; return true;} , rank==0 );
+	runTest(N,x,"SumI128",Tref, mpiSumI128 , [&sumi128](double r) {sumi128=r; return true;} , rank==0 );
+	if( method == 0 )
+	{
+		runTest(N,x,"SumIF",Tref, mpiSumIF, [&sumif](double r) {sumif=r; return true;} , rank==0 );
+	}
+	else
+	{
+		runTest(N,x,"SumIF2",Tref, mpiSumIF2, [&sumif](double r) {sumif=r; return true;} , rank==0 );
+	}
 	runTest(N,x,"sort+Sum",Tref,
 		[mpiSum](uint64_t N, double* x) -> double
 		{
 			std::sort( x, x+N, [](double a, double b) { return fabs(a)<fabs(b); } );
 			return mpiSum(N,x);
 		}
-		, [](double) {return true;}
-	);
+		, [](double) {return true;} , rank==0 );
 
-	printf("---- after sort ----\n");
+	if(rank==0)
+	{
+		printf("---- after sort ----\n");
+	}
 
-	runTest(N,x,"SumNoOpt",Tref, mpiSumNoOpt , [sumNoOpt](double r) { return r==sumNoOpt; } );
-	runTest(N,x,"Sum",Tref, mpiSum , [sumOpt](double r) { return r==sumOpt; } );
-	runTest(N,x,"SumI128",Tref, mpiSumI128, [sumi128](double r) { return r==sumi128; } );
-	testOK = runTest(N,x,"SumIF",Tref, mpiSumIF, [sumif](double r) { return r==sumif; } );
+	runTest(N,x,"SumNoOpt",Tref, mpiSumNoOpt , [sumNoOpt](double r) { return r==sumNoOpt; } , rank==0  );
+	runTest(N,x,"Sum",Tref, mpiSum , [sumOpt](double r) { return r==sumOpt; } , rank==0 );
+	runTest(N,x,"SumI128",Tref, mpiSumI128, [sumi128](double r) { return r==sumi128; } , rank==0 );
+	if(method==0)
+	{
+		testOK = runTest(N,x,"SumIF",Tref, mpiSumIF, [sumif](double r) { return r==sumif; } , rank==0 );
+	}
+	else
+	{
+		testOK = runTest(N,x,"SumIF2",Tref, mpiSumIF2, [sumif](double r) { return r==sumif; } , rank==0 );
+	}
+
+	if(rank==0) std::cout<<"\n";
+
+	MPI_Finalize();
+
 	if( !testOK ) return 1;
-	testOK = runTest(N,x,"SumIF2",Tref, mpiSumIF2, [sumif](double r) { return r==sumif; } );
-	if( !testOK ) return 1;
-
-	std::cout<<"\n";
 	return 0;
 }
 
