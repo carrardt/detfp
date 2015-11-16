@@ -9,8 +9,8 @@ static inline int log2ui(int64_t x)
 
 int main(int argc,char* argv[])
 {
-    long x = atoi(argv[1]);
-    printf("%d\n",log2ui(x));
+    int64_t x = atoll(argv[1]);
+    printf("%08llX => %d\n",x,log2ui(x));
     return 0;
 }
 

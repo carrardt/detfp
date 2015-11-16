@@ -48,13 +48,14 @@ static void printSumDataDiff(const IFloat64& sumData1, const IFloat64& sumData2)
 	int bmax = std::max( sumData1.bmax , sumData2.bmax );
 	for(int i=bmin; i<=bmax; i++)
 	{
-		if( i<sumData1.bmin || i>sumData1.bmax || i<sumData2.bmin || i>sumData2.bmax || sumData1.msum[i]!=sumData2.msum[i] || sumData1.mcarry[i]!=sumData2.mcarry[i] )
+		if( i<sumData1.bmin || i>sumData1.bmax || i<sumData2.bmin || i>sumData2.bmax || sumData1.msum[i]!=sumData2.msum[i] )
 		{
 			std::cout<<i<<" : ";
-			if( i<sumData1.bmin || i> sumData1.bmax ) std::cout<<"C=X/M=X ";
-			else std::cout<<"C="<<sumData1.mcarry[i]<<"/M="<<exp2(-52) * (double)sumData1.msum[i] << " ";
-			if( i<sumData2.bmin || i> sumData2.bmax ) std::cout<<"C=X/M=X\n";
-			else std::cout<<"C="<<sumData2.mcarry[i]<<"/M="<<exp2(-52) * (double)sumData2.msum[i] << "\n";
+			if( i<sumData1.bmin || i> sumData1.bmax ) std::cout<<"X";
+			else std::cout << exp2(-52) * (double)sumData1.msum[i];
+			std::cout<<"\t";
+			if( i<sumData2.bmin || i> sumData2.bmax ) std::cout<<"X\n";
+			else std::cout << exp2(-52) * (double)sumData2.msum[i] << "\n";
 		}
 	}
 }

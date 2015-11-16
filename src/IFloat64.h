@@ -13,12 +13,7 @@
 #include <omp.h>
 #endif
 
-static inline int log2ui(int64_t x)
-{
-	return __lzcnt64( (x<0) ? -x : x );
-}
-
-template<int16_t _EXPMIN=-128, int16_t _EXPMAX=127>
+template<int16_t _EXPMIN=-256, int16_t _EXPMAX=255>
 struct IFloat64T
 {
     static constexpr int16_t EXPMIN = _EXPMIN;
@@ -26,44 +21,61 @@ struct IFloat64T
     static constexpr uint16_t EXPRANGESIZE = (EXPMAX-EXPMIN+1);
 
     int64_t msum[EXPRANGESIZE];
-    int32_t mcarry[EXPRANGESIZE];
     uint16_t bmin; // lowest exponent bin used
     uint16_t bmax;
 
     inline IFloat64T() : bmin(EXPRANGESIZE-1), bmax(0)
     {
-        for(int i=0;i<EXPRANGESIZE;i++)
-        {
-            msum[i]=0;
-            mcarry[i]=0;
-        }
+        for(int i=0;i<EXPRANGESIZE;i++) { msum[i]=0; }
     }
 
     inline void reset()
     {
-	for(int i=bmin;i<=bmax;i++)
-        {
-            msum[i]=0;
-            mcarry[i]=0;
-        }
+	for(int i=bmin;i<=bmax;i++) { msum[i]=0; }
  	bmin = EXPRANGESIZE-1;
 	bmax = 0;
     }
 
-    inline uint16_t nzCarries() const
+    inline bool isNormalized() const
     {
-	uint16_t n = 0;
-	for(int i=bmin;i<=bmax;i++)
+	int64_t mask = 0;
+	for(int i=bmin;i<bmax;i++)
 	{
-		if(mcarry[i]!=0) ++n;
+		mask |= msum[i];
 	}
-	return n;
+	if( (mask>>53) != 0 ) return false;
+	mask = msum[bmax]>>53;
+	return mask==0 || mask==-1;
+    }
+
+    inline void addValuesI64(uint64_t n, const int64_t * x)
+    {
+      	for(uint64_t i=0;i<n;i++)
+   	{
+	    int64_t X = x[i];
+	    int64_t s = X >> 63; 
+	    int16_t e = ( (X >> 52 ) & ((1ULL<<11)-1) ); 
+	    int64_t m = X & ((1ULL<<52)-1ULL);
+	    if(e!=0) { m |= (1ULL<<52); e-=1023; } // if not denormalized
+	    m = (m^s) - s ; // make signed normalized mantissa (-1)^s * 1,m
+
+	    // TODO: detect and process nan/inf
+	    DBG_ASSERT( e>=EXPMIN && e<=EXPMAX );
+	    uint16_t ebin = e - EXPMIN;
+
+	    // add signed mantissa
+	    msum[ebin] += m;
+
+            // update exponent range
+	    if(ebin<bmin) { bmin=ebin; }
+	    if(ebin>bmax) { bmax=ebin; }
+	}
     }
 
     inline void addValues(uint64_t n, const double * dx)
     {
        	const int64_t * x = reinterpret_cast<const int64_t*>( dx );
-#ifdef _OPENMP
+#if 0 //def _OPENMP
 	const int maxThreads = omp_get_max_threads();
 	IFloat64T sharedBuf[maxThreads];
 #   	pragma omp parallel
@@ -123,115 +135,56 @@ struct IFloat64T
 		}
 	}
 #else
-       	for(uint64_t i=0;i<n;i++)
+	uint64_t rounds = n / 256;
+	for(uint64_t j=0;j<rounds;j++)
 	{
-	    int64_t s = x[i] >> 63; 
-	    int16_t e = ( (x[i]>>52) & ((1ULL<<11)-1) ); 
-	    int64_t m = x[i] & ((1ULL<<52)-1ULL);
-	    if(e!=0) { m |= (1ULL<<52); e-=1023; } // if not denormalized
-	    m = (m^s) - s ; // make signed normalized mantissa (-1)^s * 1,m
-
-	    // TODO: detect and process nan/inf
-	    DBG_ASSERT( e>=EXPMIN && e<=EXPMAX );
-	    uint16_t ebin = e - EXPMIN;
-
-	    // add signed mantissa
-	    m += msum[ebin];
-
-            // update carry, may be negative.
-	    mcarry[ebin] += m >> 53;
-
-            // set remaining mantissa
-	    msum[ebin] = m & ((1ULL<<53)-1) ;
-
-            // update exponent range
-	    if(ebin<bmin) { bmin=ebin; }
-	    if(ebin>bmax) { bmax=ebin; }
+		uint64_t offset = j * 256;
+		addValuesI64( 256 , x+offset );
+		removeCarries();
 	}
+	addValuesI64( n % 256 , x + (rounds*256) );
+	removeCarries();
 #endif
     }
-   
+
+
+    static inline int log2ui(int64_t x)
+    {
+	return __lzcnt64( (x<0) ? -x : x );
+    }
+
+    static inline int relexp(int64_t m)
+    {
+	return (m==0) ? 0 : (log2ui(m)-52) ;
+    }
+
     template<typename StreamT>
     inline void print(StreamT& os)
     {
-	os << "--- bmin="<<bmin<<", bmax="<<bmax<<" ---\n";
+	os << "--- bmin="<<bmin<<", bmax="<<bmax<<", normalized="<<isNormalized()<<" ---\n";
         for(int i=bmin;i<=bmax;i++)
 	    {
-	        int64_t m = msum[i];
-	        int32_t c = mcarry[i];
-	        uint16_t cre = (c==0) ? 0 : ( log2ui(c) + 1 );
-	        int16_t mre = (m==0) ? 0 : ( log2ui(m) - 52 ) ;
-		os << "bin "<<i<<" : cre="<<cre<<", mre="<<mre<<", carry="<<c<<" : sum="<<( (double)m/((double)(1ULL<<52)) ) << "\n";
+	        int64_t m = msum[i] ;
+		os << "bin "<<i<<" : re="<<relexp(m)<<" : sum="<<( (double)m/((double)(1ULL<<52)) ) << "\n";
 	    }
-    }
-
-    inline void distributeCarries()
-    {
-    	for(int i=bmin;i<bmax;i++)
-    	{
-    		int64_t c = mcarry[i];
-    		if( c!=0 )
-    		{
-    			mcarry[i] = 0;
-	    		uint16_t cre = log2ui(c) + 1;
-    			c = c << (53-cre);
-    			uint16_t ebin = i+cre; 
-    			DBG_ASSERT( ebin < EXPRANGESIZE );
-    			int64_t m = msum[ebin] + c;
-	            	mcarry[ebin] += m >> 53;
-    			msum[ebin] = m & ((1ULL<<53)-1);
-    			if(ebin>bmax) bmax = ebin;
-    		}
-    	}
-
-	// process highest exponent carry
-	{
-		int i = bmax;
-    		int64_t c = mcarry[i];
-    		if( c!=0 )
-    		{
-    			mcarry[i] = 0;
-	    		uint16_t cre = log2ui(c) + 1;
-    			c = c << (53-cre);
-    			uint16_t ebin = i+cre; 
-    			DBG_ASSERT( ebin < EXPRANGESIZE );
-    			int64_t m = msum[ebin] + c;
-    			msum[ebin] += c;
-    			if(ebin>bmax) bmax = ebin;
-    		}
-	}
-
-    }
-
-    inline void distributeMantissas()
-    {
-	for(int i=bmin;i<=bmax;i++)
-	{
-		int64_t m = msum[i];
-		int mre = 52 - log2ui(m) ;
-		if( m!=0 && mre!=0 )
-		{
-			msum[i] = 0;
-			DBG_ASSERT( i >= mre );
-			uint16_t ebin = i - mre;
-			m = msum[ebin] + (m << mre);
-			mcarry[ebin] += m >> 53;
-			msum[ebin] = m & ((1ULL<<53)-1);
-			if(ebin<bmin) bmin = ebin ;
-		}
-	}
-	while( bmax>bmin && msum[bmax]==0 && mcarry[bmax]==0 ) --bmax;
     }
 
     inline void removeCarries()
     {
         int nIteration = 0;
 	// print(std::cout);
-        while( nzCarries() > 0 )
+        while( ! isNormalized() )
         {
             ++ nIteration;
-            distributeCarries();
-            distributeMantissas();
+	
+	    int64_t accum = 0;
+	    for(uint16_t i=bmin;i<=bmax;i++)
+	    {
+		accum += msum[i];
+		msum[i] = accum & ((1ULL<<53)-1);
+		accum &= ~ ((1ULL<<53)-1);
+		accum >>= 1;
+	    }
         }
     }
 
@@ -251,7 +204,7 @@ struct IFloat64T
 	if( bmax != rhs.bmax ) return false;
 	for(int i=bmin;i<=bmax;i++)
 	{
-		if( msum[i]!=rhs.msum[i] || mcarry[i]!=rhs.mcarry[i] ) return false;
+		if( msum[i]!=rhs.msum[i] ) return false;
 	}
 	return true;
     }
