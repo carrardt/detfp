@@ -2,7 +2,7 @@
 #include <assert.h>
 #include "IFloat64.h"
 
-double if64AllReduceSum_Sum(uint64_t n, const double * x, MPI_Comm comm)
+double if64SumMpiReduceSum(uint64_t n, const double * x, MPI_Comm comm)
 {
     assert( sizeof(int64_t) == sizeof(long long int) );
 
@@ -24,7 +24,7 @@ double if64AllReduceSum_Sum(uint64_t n, const double * x, MPI_Comm comm)
     return tmp.sumMantissas();
 }
 
-void if64AllReduceSum(uint64_t n, double * buf, MPI_Comm comm)
+void if64MpiReduceSum(uint64_t n, double * buf, MPI_Comm comm)
 {
     assert( sizeof(int64_t) == sizeof(long long int) );
 

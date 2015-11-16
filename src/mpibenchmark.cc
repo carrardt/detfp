@@ -122,12 +122,12 @@ int main(int argc, char* argv[])
 
 	auto mpiSumIF = [] (uint64_t n,const double* x)
 		{
-			return if64AllReduceSum_Sum(n,x,MPI_COMM_WORLD);
+			return if64SumMpiReduceSum(n,x,MPI_COMM_WORLD);
 		};
 
 	auto mpiSumIF2 = [] (uint64_t n, double* x)
 		{
-			if64AllReduceSum(n,x,MPI_COMM_WORLD);
+			if64MpiReduceSum(n,x,MPI_COMM_WORLD);
 			return if64Sum(n,x);
 		};
 

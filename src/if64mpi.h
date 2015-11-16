@@ -3,7 +3,7 @@
 
 #include <mpi.h>
 
-void if64AllReduceSum(uint64_t n, double * x, MPI_Comm comm);
-double if64AllReduceSum_Sum(uint64_t n, const double * x, MPI_Comm comm);
+void if64MpiReduceSum(uint64_t n, double * x, MPI_Comm comm);
+double if64SumMpiReduceSum(uint64_t n, const double * x, MPI_Comm comm);
 
 #endif
