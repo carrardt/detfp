@@ -41,35 +41,12 @@ int main(int argc, char* argv[])
 			std::cout<<"add "<<x[i]<<std::endl;
 			if64.addValuesI64( 1, reinterpret_cast<int64_t*>(x+i) );
 			if64.print( std::cout );
-		        /*while( ! if64.isNormalized() )
-		        {
-			    std::cout<<"distributeCarries()\n";
-		            if64.distributeCarries();
-			    if64.print( std::cout );
-			    sleep(2);
-			    std::cout<<"distributeMantissas()\n";
-		            if64.distributeMantissas();
-			    if64.print( std::cout );
-			    sleep(2);
-		        }*/
 		}
 	}
 
-	int nIterations = 0;
-        while( ! if64.isNormalized() )
-        {
-	    ++ nIterations;
-	    std::cout<<"distributeCarries\n";	
-            if64.distributeCarries();
-	    if64.print( std::cout );
-	    std::cout<<"distributeMantissas\n";	
-            if64.distributeMantissas();
-	    if64.print( std::cout );
-        }
-	std::cout<<"iterations = "<<nIterations<<"\n";
 	double r=0.0;
 	for(uint64_t i=0;i<N;i++){ r += x[i]; }
-	printf("result = %20.20lf / %20.20lf\n",if64.sumMantissas(),r);
+	printf("result = %20.20lf / %20.20lf\n",if64.toDouble(),r);
 //	std::cout<<"result = "<<if64.sumMantissas()<<" / "<<r<<"\n";
 
 	return 0;

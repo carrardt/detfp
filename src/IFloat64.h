@@ -7,7 +7,7 @@
 #include <x86intrin.h>
 
 #define DBG_ASSERT(x) assert(x)
-//#include <iostream>
+#include <iostream>
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -38,6 +38,24 @@ struct IFloat64T
 	return ( (mask>>32) != 0 );
     }
 
+    static inline int64_t extractSignedBits(int64_t x, unsigned int b, unsigned int n)
+    {
+	unsigned int endBit = b+n;
+	if( n==0 ) return 0;
+	if( n > 64 ) return 0;
+	if( (b+n) > 64 ) return 0;
+	return ( x << (64-endBit) ) >> (64-n);
+    }
+
+    static inline uint64_t extractBits(uint64_t x, unsigned int b, unsigned int n)
+    {
+	unsigned int endBit = b+n;
+	if( n==0 ) return 0;
+	if( n > 64 ) return 0;
+	if( (b+n) > 64 ) return 0;
+	return ( x << (64-endBit) ) >> (64-n);
+    }
+
     inline void addValuesI64(uint64_t n, const int64_t * x)
     {
       	for(uint64_t i=0;i<n;i++)
@@ -51,21 +69,19 @@ struct IFloat64T
 	    int32_t E = e - EXPMIN;
 
 	    DBG_ASSERT( E >= 0 );
-
 	    uint32_t Ebin = E / 32;
+	    DBG_ASSERT( Ebin < (EXPSLOTS-2) );
+
 	    uint32_t hbc = E % 32;
 	    uint32_t mbc = 32;
 	    uint32_t lbc = 64 - (hbc+mbc);
-	    int64_t hp = 0;
-	    if( hbc > 0 )
-	    {
-		hp = m >> (64 - hbc);
-		m = m & ( 0x8000000000000000LL >> (hbc-1) );
-	    }
-	    int64_t mp = m >> (32-hbc);
-	    int64_t lp = ( m << hbc ) & 0x00000000FFFFFFFFLL;
+	    // std::cout<<"E="<<E<<", m="<<m<<", e="<<e<<", s="<<s<<", Ebin="<<Ebin<<", hbc="<<hbc<<", mbc="<<mbc<<", lbc="<<lbc<<"\n";
 
-	    DBG_ASSERT( Ebin < (EXPSLOTS-2) );
+	    int64_t hp = extractSignedBits( m, 64-hbc, hbc );
+	    int64_t mp = extractBits( m , 64-hbc-mbc, mbc );
+	    int64_t lp = extractBits( m , 64-hbc-mbc-lbc, lbc );
+
+	    // std::cout<<"lp="<<lp<<", mp="<<mp<<", hp="<<hp<<"\n";
 
 	    msum[Ebin] += lp;
 	    msum[Ebin+1] += mp;
@@ -103,7 +119,7 @@ struct IFloat64T
     inline void print(StreamT& os) const
     {
 	os << "--- normalized="<<isNormalized()<<" ---\n";
-        for(int i=0;i<=EXPSLOTS;i++)
+        for(int i=0;i<EXPSLOTS;i++)
 	    {
 	        int64_t m = msum[i] ;
 		os << "bin "<<i<<" : re="<<relexp(m)<<" : sum="<<( (double)m/((double)(1ULL<<32)) ) << "\n";
@@ -124,19 +140,27 @@ struct IFloat64T
 
     inline double toDouble() const
     {
-	int64_t mantissaSum = 0;
-        for(int i=bmin;i<=bmax;i++)
-        {
-	    mantissaSum = (mantissaSum>>1) + msum[i];
-        }
-        return exp2(bmax+EXPMIN-52) * ((double)mantissaSum);
+	double Sum = 0.0;
+	if( msum[EXPSLOTS-1] < 0 )
+	{
+	        for(int i=EXPSLOTS-1; i>=0; --i)
+	        {
+		    Sum += exp2(i*32+EXPMIN-52) * ((double)msum[i]);
+	        }
+	}
+	else
+	{
+	        for(int i=0; i<EXPSLOTS; ++i)
+	        {
+		    Sum += exp2(i*32+EXPMIN-52) * ((double)msum[i]);
+	        }
+	}
+        return Sum;
     }
 
     inline bool operator == (const IFloat64T& rhs) const
     {
-	if( bmin != rhs.bmin ) return false;
-	if( bmax != rhs.bmax ) return false;
-	for(int i=bmin;i<=bmax;i++)
+	for(int i=0;i<EXPSLOTS;i++)
 	{
 		if( msum[i]!=rhs.msum[i] ) return false;
 	}
