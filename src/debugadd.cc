@@ -12,37 +12,47 @@
 int main(int argc, char* argv[])
 {
 	int64_t N = atol(argv[1]);
+	int64_t mode = atol(argv[2]);
 
-	std::cout<<"initialization\n";
+	//std::cout<<"initialization\n";
 	IFloat64 if64;
-	if64.print( std::cout );
+	//if64.print( std::cout );
 
-	double* x = 0;
-	if( N > 0 )
+	double* x = (double*)malloc(N*sizeof(double));
+
+	if( mode < 0 )
 	{
-		long seed = atol(argv[2]);
-		std::cout<<"N="<<N<<", seed="<<seed<<std::endl;
-		x = (double*)malloc(N*sizeof(double));
+		long seed = atol(argv[3]);
+		std::cout<<"seed = "<<seed<<std::endl;
 		srand48(seed);
 		for(uint64_t i=0;i<N;i++)
 		{
 			x[i] = (drand48()-0.5) * exp2( static_cast<int>(drand48()*40.0-20.0) );
 		}
 		x[ static_cast<uint64_t>(drand48()*(N-1)) ] = 0.0;
-		if64.addValues( N , x );
 	}
-	else
+	else if( mode==0 )
 	{
-		N = -N;
-		x = (double*)malloc(N*sizeof(double));
 		for(uint64_t i=0;i<N;i++)
 		{
 			std::cin >> x[i];
-			std::cout<<"add "<<x[i]<<std::endl;
-			if64.addValuesI64( 1, reinterpret_cast<int64_t*>(x+i) );
-			if64.print( std::cout );
 		}
 	}
+	else if( mode==1 )
+	{
+		int64_t start = atoll(argv[3]);
+		int64_t inc = atoll(argv[4]);
+		std::cout<<"start = "<<start<<", inc="<<inc<<"\n";
+		for(int64_t i=0;i<N;i++)
+		{
+			x[i] = start;
+			start += inc;
+		}
+	}
+	else { return 1; }
+
+	if64.addValues( N , x );
+	if64.print( std::cout );
 
 	double r=0.0;
 	for(uint64_t i=0;i<N;i++){ r += x[i]; }

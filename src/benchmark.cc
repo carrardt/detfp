@@ -44,18 +44,13 @@ static inline bool runTest( uint64_t n, double* x, const char* methodName, doubl
 
 static void printSumDataDiff(const IFloat64& sumData1, const IFloat64& sumData2)
 {
-	int bmin = std::min( sumData1.bmin , sumData2.bmin );
-	int bmax = std::max( sumData1.bmax , sumData2.bmax );
-	for(int i=bmin; i<=bmax; i++)
+	for(int i=0; i<IFloat64::EXPSLOTS; i++)
 	{
-		if( i<sumData1.bmin || i>sumData1.bmax || i<sumData2.bmin || i>sumData2.bmax || sumData1.msum[i]!=sumData2.msum[i] )
+		if( sumData1.msum[i] != sumData2.msum[i] )
 		{
-			std::cout<<i<<" : ";
-			if( i<sumData1.bmin || i> sumData1.bmax ) std::cout<<"X";
-			else std::cout << exp2(-52) * (double)sumData1.msum[i];
-			std::cout<<"\t";
-			if( i<sumData2.bmin || i> sumData2.bmax ) std::cout<<"X\n";
-			else std::cout << exp2(-52) * (double)sumData2.msum[i] << "\n";
+			std::cout<<i<<" : " ;
+			std::cout << exp2(-32)*(double)sumData1.msum[i] << " : ";
+			std::cout << exp2(-32)*(double)sumData2.msum[i] << "\n";
 		}
 	}
 }

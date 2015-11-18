@@ -28,9 +28,6 @@ if(ENABLE_MPI)
 	endif()
 endif()
 
-add_definitions("-mlzcnt")
-#SET( CMAKE_EXE_LINKER_FLAGS  "${CMAKE_EXE_LINKER_FLAGS} -mlzcnt")
-
 add_library(if64 ${IS64_SOURCES})
 
 add_executable(benchmark src/benchmark.cc)
@@ -38,8 +35,6 @@ target_link_libraries(benchmark if64)
 
 add_executable(debugadd src/debugadd.cc)
 target_link_libraries(debugadd if64)
-
-add_executable(testlzcnt src/testlzcnt.c)
 
 if (MPI_FOUND)
 	add_executable(mpibenchmark src/mpibenchmark.cc)

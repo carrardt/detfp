@@ -4,7 +4,6 @@
 #include <cstdint>
 #include <assert.h>
 #include <math.h>
-#include <x86intrin.h>
 
 #define DBG_ASSERT(x) assert(x)
 #include <iostream>
@@ -82,10 +81,12 @@ struct IFloat64T
 	    int64_t lp = extractBits( m , 64-hbc-mbc-lbc, lbc );
 
 	    // std::cout<<"lp="<<lp<<", mp="<<mp<<", hp="<<hp<<"\n";
-
 	    msum[Ebin] += lp;
 	    msum[Ebin+1] += mp;
 	    msum[Ebin+2] += hp;
+
+	    //std::cout<<"add "<<exp2(e-52)*(double)m<<"\n";
+	    //print(std::cout);
 	}
     }
 
@@ -98,21 +99,10 @@ struct IFloat64T
 	{
 		uint64_t offset = j * R;
 		addValuesI64( R , x+offset );
-		removeCarries();
+		normalize();
 	}
 	addValuesI64( n % R , x + (rounds*R) );
-	removeCarries();
-    }
-
-
-    static inline int log2ui(int64_t x)
-    {
-	return __lzcnt64( (x<0) ? -x : x );
-    }
-
-    static inline int relexp(int64_t m)
-    {
-	return (m==0) ? 0 : (log2ui(m)-32) ;
+	normalize();
     }
 
     template<typename StreamT>
@@ -122,20 +112,25 @@ struct IFloat64T
         for(int i=0;i<EXPSLOTS;i++)
 	    {
 	        int64_t m = msum[i] ;
-		os << "bin "<<i<<" : re="<<relexp(m)<<" : sum="<<( (double)m/((double)(1ULL<<32)) ) << "\n";
+		os << "bin "<<i<<" : "<< exp2(-32)*((double)m) << "\n";
 	    }
     }
 
-    inline void removeCarries()
+    inline void normalize()
     {
+	std::cout<<"normalize\n";
     	int64_t carry = 0;
 	for(uint16_t i=0;i<(EXPSLOTS-1);i++)
 	{
-		msum[i] += carry;
-		carry = msum[i] >> 32;
-		msum[i] &= 0x00000000FFFFFFFFLL;
+		int64_t m = msum[i];
+		std::cout<<i<<": m="<<m<<", c="<<carry<<" -> m=";
+		m += carry;
+		carry = m >> 32;
+		msum[i] = m & ((1ULL<<32)-1ULL);
+		std::cout<<msum[i]<<", c="<<carry<<"\n";
 	}
 	msum[EXPSLOTS-1] += carry;
+	std::cout<<EXPSLOTS-1<<": m="<<msum[EXPSLOTS-1]<<"\n";
     }
 
     inline double toDouble() const
