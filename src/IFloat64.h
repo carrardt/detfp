@@ -13,39 +13,29 @@
 #include <omp.h>
 #endif
 
-template<int16_t _EXPMIN=-256, int16_t _EXPMAX=255>
+template<int16_t _EXPMIN=-256, uint16_t _EXPSLOTS=16>
 struct IFloat64T
 {
+    static constexpr uint16_t EXPSLOTS = _EXPSLOTS;
+    static constexpr uint16_t SLOTBITS = 32;
     static constexpr int16_t EXPMIN = _EXPMIN;
-    static constexpr int16_t EXPMAX = _EXPMAX;
-    static constexpr uint16_t EXPRANGESIZE = (EXPMAX-EXPMIN+1);
+    static constexpr int16_t EXPMAX = _EXPMIN + EXPSLOTS*SLOTBITS;
 
-    int64_t msum[EXPRANGESIZE];
-    uint16_t bmin; // lowest exponent bin used
-    uint16_t bmax;
+    int64_t msum[EXPSLOTS];
 
-    inline IFloat64T() : bmin(EXPRANGESIZE-1), bmax(0)
+    inline IFloat64T()
     {
-        for(int i=0;i<EXPRANGESIZE;i++) { msum[i]=0; }
-    }
-
-    inline void reset()
-    {
-	for(int i=bmin;i<=bmax;i++) { msum[i]=0; }
- 	bmin = EXPRANGESIZE-1;
-	bmax = 0;
+        for(int i=0;i<EXPSLOTS;i++) { msum[i]=0; }
     }
 
     inline bool isNormalized() const
     {
 	int64_t mask = 0;
-	for(int i=bmin;i<bmax;i++)
+	for(int i=0;i<(EXPSLOTS-1);i++)
 	{
 		mask |= msum[i];
 	}
-	if( (mask>>53) != 0 ) return false;
-	mask = msum[bmax]>>53;
-	return mask==0 || mask==-1;
+	return ( (mask>>32) != 0 );
     }
 
     inline void addValuesI64(uint64_t n, const int64_t * x)
@@ -54,97 +44,48 @@ struct IFloat64T
    	{
 	    int64_t X = x[i];
 	    int64_t s = X >> 63; 
-	    int16_t e = ( (X >> 52 ) & ((1ULL<<11)-1) ); 
+	    int32_t e = ( (X >> 52 ) & ((1ULL<<11)-1) ); 
 	    int64_t m = X & ((1ULL<<52)-1ULL);
 	    if(e!=0) { m |= (1ULL<<52); e-=1023; } // if not denormalized
 	    m = (m^s) - s ; // make signed normalized mantissa (-1)^s * 1,m
+	    int32_t E = e - EXPMIN;
 
-	    // TODO: detect and process nan/inf
-	    DBG_ASSERT( e>=EXPMIN && e<=EXPMAX );
-	    uint16_t ebin = e - EXPMIN;
+	    DBG_ASSERT( E >= 0 );
 
-	    // add signed mantissa
-	    msum[ebin] += m;
+	    uint32_t Ebin = E / 32;
+	    uint32_t hbc = E % 32;
+	    uint32_t mbc = 32;
+	    uint32_t lbc = 64 - (hbc+mbc);
+	    int64_t hp = 0;
+	    if( hbc > 0 )
+	    {
+		hp = m >> (64 - hbc);
+		m = m & ( 0x8000000000000000LL >> (hbc-1) );
+	    }
+	    int64_t mp = m >> (32-hbc);
+	    int64_t lp = ( m << hbc ) & 0x00000000FFFFFFFFLL;
 
-            // update exponent range
-	    if(ebin<bmin) { bmin=ebin; }
-	    if(ebin>bmax) { bmax=ebin; }
+	    DBG_ASSERT( Ebin < (EXPSLOTS-2) );
+
+	    msum[Ebin] += lp;
+	    msum[Ebin+1] += mp;
+	    msum[Ebin+2] += hp;
 	}
     }
 
     inline void addValues(uint64_t n, const double * dx)
     {
+	static constexpr uint64_t R = 1024*1024;
        	const int64_t * x = reinterpret_cast<const int64_t*>( dx );
-#if 0 //def _OPENMP
-	const int maxThreads = omp_get_max_threads();
-	IFloat64T sharedBuf[maxThreads];
-#   	pragma omp parallel
-    	{
-		IFloat64T privBuf;
-		const int tid = omp_get_thread_num(); 
-#		pragma omp for nowait
-       		for(uint64_t i=0;i<n;i++)
-		{
-		    int64_t s = x[i] >> 63; 
-		    int16_t e = ( (x[i]>>52) & ((1ULL<<11)-1) ); 
-		    int64_t m = x[i] & ((1ULL<<52)-1ULL);
-		    if(e!=0) { m |= (1ULL<<52); e-=1023; } // if not denormalized
-		    m = (m^s) - s ; // make signed normalized mantissa (-1)^s * 1,m
-
-		    // TODO: detect and process nan/inf
-		    DBG_ASSERT( e>=EXPMIN && e<=EXPMAX );
-		    uint16_t ebin = e - EXPMIN;
-
-		    // add signed mantissa
-		    m += privBuf.msum[ebin];
-
-		    // update carry, may be negative.
-		    privBuf.mcarry[ebin] += m >> 53;
-
-		    // set remaining mantissa
-		    privBuf.msum[ebin] = m & ((1ULL<<53)-1) ;
-
-		    // update exponent range
-		    if(ebin<privBuf.bmin) { privBuf.bmin=ebin; }
-		    if(ebin>privBuf.bmax) { privBuf.bmax=ebin; }
-		}
-		for(unsigned int i=privBuf.bmin; i<=privBuf.bmax; i++)
-		{
-			sharedBuf[tid].msum[i] = privBuf.msum[i];
-			sharedBuf[tid].mcarry[i] = privBuf.mcarry[i];
-		}
-		sharedBuf[tid].bmin = privBuf.bmin;
-		sharedBuf[tid].bmax = privBuf.bmax;
-//#		pragma omp flush
-#		pragma omp barrier
-		for(unsigned int t=0;t<maxThreads;t++)
-		{
-#			pragma omp for
-			for(unsigned int i=sharedBuf[t].bmin; i<=sharedBuf[t].bmax; i++)
-			{
-				int64_t m = msum[i] + sharedBuf[t].msum[i];
-				mcarry[i] += sharedBuf[t].mcarry[i];
-				mcarry[i] += m >> 53;
-				msum[i] = m & ((1ULL<<53)-1) ;
-			}
-#			pragma omp single
-			{
-				if( sharedBuf[t].bmin < bmin ) bmin = sharedBuf[t].bmin;
-				if( sharedBuf[t].bmax > bmax ) bmax = sharedBuf[t].bmax;
-			}
-		}
-	}
-#else
-	uint64_t rounds = n / 256;
+	uint64_t rounds = n / R;
 	for(uint64_t j=0;j<rounds;j++)
 	{
-		uint64_t offset = j * 256;
-		addValuesI64( 256 , x+offset );
+		uint64_t offset = j * R;
+		addValuesI64( R , x+offset );
 		removeCarries();
 	}
-	addValuesI64( n % 256 , x + (rounds*256) );
+	addValuesI64( n % R , x + (rounds*R) );
 	removeCarries();
-#endif
     }
 
 
@@ -155,37 +96,30 @@ struct IFloat64T
 
     static inline int relexp(int64_t m)
     {
-	return (m==0) ? 0 : (log2ui(m)-52) ;
+	return (m==0) ? 0 : (log2ui(m)-32) ;
     }
 
     template<typename StreamT>
     inline void print(StreamT& os)
     {
-	os << "--- bmin="<<bmin<<", bmax="<<bmax<<", normalized="<<isNormalized()<<" ---\n";
-        for(int i=bmin;i<=bmax;i++)
+	os << "--- normalized="<<isNormalized()<<" ---\n";
+        for(int i=0;i<=EXPSLOTS;i++)
 	    {
 	        int64_t m = msum[i] ;
-		os << "bin "<<i<<" : re="<<relexp(m)<<" : sum="<<( (double)m/((double)(1ULL<<52)) ) << "\n";
+		os << "bin "<<i<<" : re="<<relexp(m)<<" : sum="<<( (double)m/((double)(1ULL<<32)) ) << "\n";
 	    }
     }
 
     inline void removeCarries()
     {
-        int nIteration = 0;
-	// print(std::cout);
-        while( ! isNormalized() )
-        {
-            ++ nIteration;
-	
-	    int64_t accum = 0;
-	    for(uint16_t i=bmin;i<=bmax;i++)
-	    {
-		accum += msum[i];
-		msum[i] = accum & ((1ULL<<53)-1);
-		accum &= ~ ((1ULL<<53)-1);
-		accum >>= 1;
-	    }
-        }
+    	int64_t carry = 0;
+	for(uint16_t i=0;i<(EXPSLOTS-1);i++)
+	{
+		msum[i] += carry;
+		carry = msum[i] >> 32;
+		msum[i] &= 0x00000000FFFFFFFFLL;
+	}
+	msum[EXPSLOTS-1] += carry;
     }
 
     inline double sumMantissas()
