@@ -100,7 +100,7 @@ struct IFloat64T
     }
 
     template<typename StreamT>
-    inline void print(StreamT& os)
+    inline void print(StreamT& os) const
     {
 	os << "--- normalized="<<isNormalized()<<" ---\n";
         for(int i=0;i<=EXPSLOTS;i++)
@@ -122,7 +122,7 @@ struct IFloat64T
 	msum[EXPSLOTS-1] += carry;
     }
 
-    inline double sumMantissas()
+    inline double toDouble() const
     {
 	int64_t mantissaSum = 0;
         for(int i=bmin;i<=bmax;i++)
@@ -132,7 +132,7 @@ struct IFloat64T
         return exp2(bmax+EXPMIN-52) * ((double)mantissaSum);
     }
 
-    inline bool operator == (const IFloat64T& rhs)
+    inline bool operator == (const IFloat64T& rhs) const
     {
 	if( bmin != rhs.bmin ) return false;
 	if( bmax != rhs.bmax ) return false;
