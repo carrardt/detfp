@@ -72,7 +72,7 @@ struct IFloat64T
 
 	    DBG_ASSERT( Ebin < (EXPSLOTS-2) );
 
-	    uint32_t hbc = E & 31U;
+	    uint32_t hbc = E & 31UL;
 	    uint32_t lbc = 32 - hbc;
 	    // std::cout<<"E="<<E<<", m="<<m<<", e="<<e<<", s="<<s<<", Ebin="<<Ebin<<", hbc="<<hbc<<", mbc="<<mbc<<", lbc="<<lbc<<"\n";
 	
@@ -84,8 +84,6 @@ struct IFloat64T
 	    msum[Ebin] += (lp^s)-s;
 	    msum[Ebin+1] += (mp^s)-s;
 	    msum[Ebin+2] += (hp^s)-s;
-
-	    //print(std::cout);
 	}
     }
 
