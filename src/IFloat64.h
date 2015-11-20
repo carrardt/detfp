@@ -69,7 +69,7 @@ struct IFloat64T
 	    int32_t e = ( (X >> 52 ) & ((1ULL<<11)-1) ); 
 	    int64_t m = X & ((1ULL<<52)-1ULL);
 	    if(e!=0) { m |= (1ULL<<52); e-=1023; } // if not denormalized
-	    m = (m^s) - s ; // make signed normalized mantissa (-1)^s * 1,m
+	    // m = (m^s) - s ; // make signed normalized mantissa (-1)^s * 1,m
 	    int32_t E = e - EXPMIN;
 
 	    DBG_ASSERT( E >= 0 );
@@ -81,14 +81,14 @@ struct IFloat64T
 	    uint32_t lbc = 64 - (hbc+mbc);
 	    // std::cout<<"E="<<E<<", m="<<m<<", e="<<e<<", s="<<s<<", Ebin="<<Ebin<<", hbc="<<hbc<<", mbc="<<mbc<<", lbc="<<lbc<<"\n";
 
-	    int64_t hp = extractSignedBits( m, 64-hbc, hbc );
+	    int64_t hp = extractBits( m, 64-hbc, hbc );
 	    int64_t mp = extractBits( m , 64-hbc-mbc, mbc );
 	    int64_t lp = extractBits( m , 64-hbc-mbc-lbc, lbc );
 
-	    std::cout<<"Ebin="<<Ebin<<", m="<<mantissaAsDouble(m)<<"("<<m<<")" <<", lp="<<lp<<", mp="<<mp<<", hp="<<hp<<"\n";
-	    msum[Ebin] += lp;
-	    msum[Ebin+1] += mp;
-	    msum[Ebin+2] += hp;
+	    // std::cout<<"Ebin="<<Ebin<<", m="<<mantissaAsDouble(m)<<"("<<m<<")" <<", lp="<<lp<<", mp="<<mp<<", hp="<<hp<<"\n";
+	    msum[Ebin] += (lp^s)-s;
+	    msum[Ebin+1] += (mp^s)-s;
+	    msum[Ebin+2] += (hp^s)-s;
 
 	    //print(std::cout);
 	}
