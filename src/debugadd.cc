@@ -11,10 +11,12 @@
 
 int main(int argc, char* argv[])
 {
-	int64_t N = atol(argv[1]);
+	int64_t N = atoll(argv[1]);
 	int64_t mode = atol(argv[2]);
+	int64_t flushPeriod = atoll(argv[3]);
+	if(flushPeriod<=0) flushPeriod=N;
 
-	//std::cout<<"initialization\n";
+	std::cout<<"N="<<N<<", mode="<<mode<<", period="<<flushPeriod<<"\n";
 	IFloat64 if64;
 	//if64.print( std::cout );
 
@@ -22,7 +24,7 @@ int main(int argc, char* argv[])
 
 	if( mode < 0 )
 	{
-		long seed = atol(argv[3]);
+		long seed = -mode-1;
 		std::cout<<"seed = "<<seed<<std::endl;
 		srand48(seed);
 		for(uint64_t i=0;i<N;i++)
@@ -40,8 +42,8 @@ int main(int argc, char* argv[])
 	}
 	else if( mode==1 )
 	{
-		int64_t start = atoll(argv[3]);
-		int64_t inc = atoll(argv[4]);
+		int64_t start = atoll(argv[4]);
+		int64_t inc = atoll(argv[5]);
 		std::cout<<"start = "<<start<<", inc="<<inc<<"\n";
 		for(int64_t i=0;i<N;i++)
 		{
@@ -51,12 +53,20 @@ int main(int argc, char* argv[])
 	}
 	else { return 1; }
 
-	if64.addValues( N , x );
-	if64.print( std::cout );
+	int64_t i=0;
+	while( i < N )
+	{
+		int64_t j = i + flushPeriod;
+		if( j>N ) j = N;
+		if(flushPeriod==1) std::cout<<x[i]<<"\n";
+		if64.addValues( j-i , x+i );
+		if64.print( std::cout );
+		i += flushPeriod;
+	}
 
 	double r=0.0;
 	for(uint64_t i=0;i<N;i++){ r += x[i]; }
-	printf("result = %20.20lf / %20.20lf\n",if64.toDouble(),r);
+	printf("if64.toDouble() = %20.20lf , double sum = %20.20lf\n",if64.toDouble(),r);
 //	std::cout<<"result = "<<if64.sumMantissas()<<" / "<<r<<"\n";
 
 	return 0;

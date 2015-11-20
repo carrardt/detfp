@@ -55,6 +55,11 @@ struct IFloat64T
 	return ( x << (64-endBit) ) >> (64-n);
     }
 
+    static inline double mantissaAsDouble(int64_t m)
+    {
+	return exp2(-52) * ((double)m);
+    }
+
     inline void addValuesI64(uint64_t n, const int64_t * x)
     {
       	for(uint64_t i=0;i<n;i++)
@@ -80,12 +85,11 @@ struct IFloat64T
 	    int64_t mp = extractBits( m , 64-hbc-mbc, mbc );
 	    int64_t lp = extractBits( m , 64-hbc-mbc-lbc, lbc );
 
-	    // std::cout<<"lp="<<lp<<", mp="<<mp<<", hp="<<hp<<"\n";
+	    std::cout<<"Ebin="<<Ebin<<", m="<<mantissaAsDouble(m)<<"("<<m<<")" <<", lp="<<lp<<", mp="<<mp<<", hp="<<hp<<"\n";
 	    msum[Ebin] += lp;
 	    msum[Ebin+1] += mp;
 	    msum[Ebin+2] += hp;
 
-	    //std::cout<<"add "<<exp2(e-52)*(double)m<<"\n";
 	    //print(std::cout);
 	}
     }
@@ -108,47 +112,50 @@ struct IFloat64T
     template<typename StreamT>
     inline void print(StreamT& os) const
     {
-	os << "--- normalized="<<isNormalized()<<" ---\n";
-        for(int i=0;i<EXPSLOTS;i++)
+	int s=0;
+	while(s<EXPSLOTS && msum[s]==0) ++s;
+	int e=EXPSLOTS-1;
+	while(e>=0 && msum[e]==0) --e;
+	os << "N="<<isNormalized()<<" S="<<s<<" E="<<e<<" :";
+        for(int i=s;i<=e;i++)
 	    {
-	        int64_t m = msum[i] ;
-		os << "bin "<<i<<" : "<< exp2(-32)*((double)m) << "\n";
+		os << " " << (void*)(msum[i]) ;
+//		os << " " << exp2(-32)*((double)msum[i]);
 	    }
+	os <<" = "<<toDouble()<< "\n";
     }
 
     inline void normalize()
     {
-	std::cout<<"normalize\n";
+	//std::cout<<"normalize\n";
+	uint16_t emax = EXPSLOTS-1;
+	while( emax>0 && msum[emax]==0) --emax;
+
     	int64_t carry = 0;
-	for(uint16_t i=0;i<(EXPSLOTS-1);i++)
+	for(uint16_t i=0;i<emax;i++)
 	{
 		int64_t m = msum[i];
-		std::cout<<i<<": m="<<m<<", c="<<carry<<" -> m=";
+		//std::cout<<i<<": m="<<m<<", c="<<carry<<" -> m=";
 		m += carry;
 		carry = m >> 32;
-		msum[i] = m & ((1ULL<<32)-1ULL);
-		std::cout<<msum[i]<<", c="<<carry<<"\n";
+		m = m & ((1LL<<32)-1LL);
+		msum[i] = m;
+		//std::cout<<msum[i]<<", c="<<carry<<"\n";
 	}
-	msum[EXPSLOTS-1] += carry;
-	std::cout<<EXPSLOTS-1<<": m="<<msum[EXPSLOTS-1]<<"\n";
+	msum[emax] += carry;
+	//std::cout<<EXPSLOTS-1<<": m="<<msum[EXPSLOTS-1]<<"\n";
     }
+
 
     inline double toDouble() const
     {
+	uint16_t emax = EXPSLOTS-1;
+	while( emax>0 && msum[emax]==0) --emax;
+
 	double Sum = 0.0;
-	if( msum[EXPSLOTS-1] < 0 )
+        for(int i=0; i<=emax; ++i)
 	{
-	        for(int i=EXPSLOTS-1; i>=0; --i)
-	        {
-		    Sum += exp2(i*32+EXPMIN-52) * ((double)msum[i]);
-	        }
-	}
-	else
-	{
-	        for(int i=0; i<EXPSLOTS; ++i)
-	        {
-		    Sum += exp2(i*32+EXPMIN-52) * ((double)msum[i]);
-	        }
+	    Sum += exp2(i*32+EXPMIN-52) * ((double)msum[i]);
 	}
         return Sum;
     }
