@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <assert.h>
 #include <math.h>
+#include <limits>
 
 //#define DBG_ASSERT(x) assert(x)
 #define DBG_ASSERT(x) if(!(x))__builtin_unreachable()
@@ -23,9 +24,11 @@ struct IFloat64T
 
     int64_t msum[EXPSLOTS];
     int32_t emax;
+    uint32_t flags;
 
     inline IFloat64T()
     {
+	flags = 0;
 	emax = EXPSLOTS-1;
         for(int32_t i=0;i<EXPSLOTS;i++) { msum[i]=0; }
     }
@@ -63,6 +66,7 @@ struct IFloat64T
 	    int64_t s = X >> 63; 
 	    int32_t e = extractBits( X , 52 , 11 ); 
 	    uint64_t m = extractBits( X , 0 , 52 );
+	    if(e<EXPMIN) { e=0; m=0; }
 	    if(e!=0) { m += (1ULL<<52); e-=1023; } // if not denormalized
 	    uint32_t E = e - EXPMIN;
 
@@ -70,20 +74,26 @@ struct IFloat64T
 
 	    uint32_t Ebin = E / 32;
 
-	    DBG_ASSERT( Ebin < (EXPSLOTS-2) );
-
-	    uint32_t hbc = E % 32;
-	    uint32_t lbc = 32 - hbc;
-	    // std::cout<<"E="<<E<<", m="<<m<<", e="<<e<<", s="<<s<<", Ebin="<<Ebin<<", hbc="<<hbc<<", mbc="<<mbc<<", lbc="<<lbc<<"\n";
+	    if( Ebin >= (EXPSLOTS-2)  )
+	    {
+		flags |= s ? 1 : 2;
+	    }
+	    else
+	    {
+		//DBG_ASSERT( Ebin < (EXPSLOTS-2) );
+		uint32_t hbc = E % 32;
+		uint32_t lbc = 32 - hbc;
+		// std::cout<<"E="<<E<<", m="<<m<<", e="<<e<<", s="<<s<<", Ebin="<<Ebin<<", hbc="<<hbc<<", mbc="<<mbc<<", lbc="<<lbc<<"\n";
 	
-	    int64_t hp = ( extractBits( m, 64-hbc, hbc ) ^ s ) - s;
-	    int64_t mp = ( extractBits( m , lbc, 32 ) ^ s ) - s;
-	    int64_t lp = ( extractBits( m , 0, lbc ) ^ s ) - s;
+		int64_t hp = ( extractBits( m, 64-hbc, hbc ) ^ s ) - s;
+		int64_t mp = ( extractBits( m , lbc, 32 ) ^ s ) - s;
+		int64_t lp = ( extractBits( m , 0, lbc ) ^ s ) - s;
 
-	    // std::cout<<"Ebin="<<Ebin<<", m="<<mantissaAsDouble(m)<<"("<<m<<")" <<", lp="<<lp<<", mp="<<mp<<", hp="<<hp<<"\n";
-	    msum[Ebin] += lp;
-	    msum[Ebin+1] += mp;
-	    msum[Ebin+2] += hp;
+		// std::cout<<"Ebin="<<Ebin<<", m="<<mantissaAsDouble(m)<<"("<<m<<")" <<", lp="<<lp<<", mp="<<mp<<", hp="<<hp<<"\n";
+		msum[Ebin] += lp;
+		msum[Ebin+1] += mp;
+		msum[Ebin+2] += hp;
+	    }
 	}
     }
 
@@ -122,6 +132,7 @@ struct IFloat64T
 		{
 			msum[i] += sharedBuf[t].msum[i];
 		}
+		flags |= sharedBuf[t].flags;
 	}
 	normalize();
 #else
@@ -163,6 +174,12 @@ struct IFloat64T
 
     inline double toDouble() const
     {
+	if( flags != 0 )
+	{
+		if(flags&1) return - std::numeric_limits<double>::infinity();
+		if(flags&2) return std::numeric_limits<double>::infinity();
+		return std::numeric_limits<double>::quiet_NaN();
+	}
 	double Sum = 0.0;
         for(int32_t i=0; i<=emax; ++i)
 	{

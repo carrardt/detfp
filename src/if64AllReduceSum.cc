@@ -8,20 +8,11 @@ double if64SumMpiReduceSum(uint64_t n, const double * x, MPI_Comm comm)
 
     IFloat64 tmp;
     tmp.addValues(n,x);
-    tmp.removeCarries();
 
-    MPI_Allreduce( MPI_IN_PLACE, tmp.msum , IFloat64::EXPRANGESIZE , MPI_LONG_LONG_INT, MPI_SUM, comm );
-    tmp.bmin=IFloat64::EXPRANGESIZE-1;
-    tmp.bmax=0;
-    int i;
-    for( i=0 ; i<IFloat64::EXPRANGESIZE && tmp.msum[i]==0 ; ++i )
-    if( i < IFloat64::EXPRANGESIZE ) tmp.bmin = i;
+    MPI_Allreduce( MPI_IN_PLACE, tmp.msum , IFloat64::EXPSLOTS , MPI_LONG_LONG_INT, MPI_SUM, comm );
+    tmp.normalize();
 
-    for( i=IFloat64::EXPRANGESIZE-1 ; i>=0 && tmp.msum[i]==0 ; --i )
-    if( i >=0 ) tmp.bmax = i;
-
-    tmp.removeCarries();
-    return tmp.sumMantissas();
+    return tmp.toDouble();
 }
 
 void if64MpiReduceSum(uint64_t n, double * buf, MPI_Comm comm)
