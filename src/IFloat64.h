@@ -68,11 +68,11 @@ struct IFloat64T
 
 	    DBG_ASSERT( E >= 0 );
 
-	    uint32_t Ebin = E >> 5;
+	    uint32_t Ebin = E / 32;
 
 	    DBG_ASSERT( Ebin < (EXPSLOTS-2) );
 
-	    uint32_t hbc = E & 31UL;
+	    uint32_t hbc = E % 32;
 	    uint32_t lbc = 32 - hbc;
 	    // std::cout<<"E="<<E<<", m="<<m<<", e="<<e<<", s="<<s<<", Ebin="<<Ebin<<", hbc="<<hbc<<", mbc="<<mbc<<", lbc="<<lbc<<"\n";
 	
@@ -87,9 +87,11 @@ struct IFloat64T
 	}
     }
 
-    inline void addValues(uint64_t n, const double * dx)
+    inline void addValuesSeq(uint64_t n, const double * dx)
     {
-	static constexpr uint64_t R = 1024*1024*1024;
+	// we want to avoid carry overflow,
+	// so no more than R values are added before a normalization
+	static constexpr uint64_t R = 1ULL << 30;
        	const int64_t * x = reinterpret_cast<const int64_t*>( dx );
 	uint64_t rounds = n / R;
 	for(uint64_t j=0;j<rounds;j++)
@@ -100,6 +102,15 @@ struct IFloat64T
 	}
 	addValuesI64( n % R , x + (rounds*R) );
 	normalize();
+    }
+
+    inline void addValues(uint64_t n, const double * dx)
+    {
+#ifdef _OPENMP
+	
+#else
+	addValuesSeq(n,dx);
+#endif
     }
 
     template<typename StreamT>

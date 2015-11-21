@@ -95,6 +95,17 @@ int main(int argc, char* argv[])
 	runTest(N,x,"SumI128",Tref,f64Sumi128, [&sumi128](double r) {sumi128=r; return true;} );
 	//runTest(N,x,"SumIF",Tref, [&sumData1](uint64_t n,const double* x) { return if64Sum(n,x,sumData1); } , [&sumif](double r) {sumif=r; return true;} );
 	runTest(N,x,"SumIF",Tref, if64Sum, [&sumif](double r) {sumif=r; return true;} );
+
+	printf("---- re-order ----\n");
+	for(uint64_t i=0;i<N/2;i++)
+	{
+		int64_t a = static_cast<int64_t>( drand48()*N );
+		if ( a<0 ) a=0; else if( a>=N ) a=N-1;
+		int64_t b = static_cast<int64_t>( drand48()*N );
+		if ( b<0 ) b=0; else if( b>=N ) b=N-1;
+		std::swap( x[a] , x[b] );
+	}
+	/*
 	runTest(N,x,"sort+Sum",Tref,
 		[](uint64_t N, double* x) -> double
 		{
@@ -103,8 +114,7 @@ int main(int argc, char* argv[])
 		}
 		, [](double)->bool{return true;}
 	);
-
-	printf("---- after sort ----\n");
+	*/
 
 	runTest(N,x,"SumNoOpt",Tref,f64SumNoOpt, [sumNoOpt](double r) { return r==sumNoOpt; } );
 	runTest(N,x,"Sum",Tref,f64Sum, [sumOpt](double r) { return r==sumOpt; } );
