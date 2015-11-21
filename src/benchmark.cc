@@ -97,7 +97,8 @@ int main(int argc, char* argv[])
 	runTest(N,x,"SumIF",Tref, if64Sum, [&sumif](double r) {sumif=r; return true;} );
 
 	printf("---- re-order ----\n");
-	for(uint64_t i=0;i<N/2;i++)
+	uint64_t nswap = (N<1000) ? N : (N/10);
+	for(uint64_t i=0;i<nswap;i++)
 	{
 		int64_t a = static_cast<int64_t>( drand48()*N );
 		if ( a<0 ) a=0; else if( a>=N ) a=N-1;
