@@ -5,7 +5,6 @@
 
 
 double f64SumNoOpt(uint64_t n, const double * x) __attribute__((optimize("no-tree-vectorize"))) ;
-
 double f64Sum(uint64_t n, const double * x);
 double f64Sumi128(uint64_t n, const double * x);
 
