@@ -67,7 +67,7 @@ int main(int argc, char* argv[])
 		srand48(seed);
 		for(uint64_t i=0;i<N;i++)
 		{
-			x[i] = (drand48()-0.5) * exp2( static_cast<int>(drand48()*40.0-20.0) );
+			x[i] = (drand48()-0.5) * exp2( static_cast<int>(drand48()*400.0-200.0) );
 		}
 		x[ static_cast<uint64_t>(drand48()*(N-1)) ] = 0.0;
 	}
@@ -75,7 +75,7 @@ int main(int argc, char* argv[])
 	{
 		for(uint64_t i=0;i<N;i++)
 		{
-			double E = ( ((double)i) * 40.0 / (double)N ) - 20.0;
+			double E = ( ((double)i) * 400.0 / (double)N ) - 200.0;
 			double I = i;
 			double S = seed;
 			x[i] = S + I * exp2( E );

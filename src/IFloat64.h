@@ -16,17 +16,24 @@
 
 #include <immintrin.h>
 
-template<int32_t _EXPMIN, int32_t _EXPSLOTS>
+#define IFloat64T_SHIFT_MSUM 1
+//#define IFloat64T_HAS_AVX2 1
+
+template<int32_t _EXPMIN, int32_t _EXPSLOTS, bool _IEEE754_NanInf=true, bool _IEEE754_Subnormal=true>
 struct IFloat64T
 {
+    static constexpr bool IEEE754_NanInf = _IEEE754_NanInf;
+    static constexpr bool IEEE754_Subnormal = _IEEE754_Subnormal;
     static constexpr int32_t EXPSLOTS = _EXPSLOTS;
     static constexpr int32_t SLOTBITS = 32;
     static constexpr int32_t EXPMIN = _EXPMIN;
     static constexpr int32_t EXPMAX = _EXPMIN + EXPSLOTS*SLOTBITS;
 
-    int64_t msum[EXPSLOTS] __attribute__((aligned(64))) ;
-    int64_t msum1[EXPSLOTS-1] __attribute__((aligned(64))) ; // msum shifted by one
-    int64_t msum2[EXPSLOTS-2] __attribute__((aligned(64))) ; // msum shifted by two
+    int64_t msum[EXPSLOTS] ;
+#   ifdef IFloat64T_SHIFT_MSUM
+    	int64_t msum1[EXPSLOTS-1] ; // msum shifted by one
+    	int64_t msum2[EXPSLOTS-2] ; // msum shifted by two
+#   endif
     int32_t emax;
     uint32_t flags;
 
@@ -35,8 +42,10 @@ struct IFloat64T
 	flags = 0;
 	emax = EXPSLOTS-1;
         for(int32_t i=0;i<EXPSLOTS;i++) { msum[i]=0; }
-        for(int32_t i=0;i<EXPSLOTS-1;i++) { msum1[i]=0; }
-        for(int32_t i=0;i<EXPSLOTS-2;i++) { msum2[i]=0; }
+#	ifdef IFloat64T_SHIFT_MSUM
+        	for(int32_t i=0;i<EXPSLOTS-1;i++) { msum1[i]=0; }
+        	for(int32_t i=0;i<EXPSLOTS-2;i++) { msum2[i]=0; }
+#	endif
     }
 
     inline bool isNormalized() const
@@ -74,14 +83,25 @@ struct IFloat64T
 	    uint64_t m = extractBits( X , 0 , 52 );
 
 	    // detect NaN and infity
-	    if(e==0x7FF)
+	    if( IEEE754_NanInf )
 	    {
-		if(m) flags |= s ? 4 : 8 ; // +/- NaN
-		else flags |= s ? 1 : 2; // +/- Inf
- 	    }
+	      	if(e==0x7FF)
+	      	{
+			if(m) flags |= s ? 4 : 8 ; // +/- NaN
+			else flags |= s ? 1 : 2; // +/- Inf
+ 	      	}
+	    }
 
-	    // denormalized case
-	    if(e!=0) { m += (1ULL<<52); e-=1023; }
+	    // treat denormalized case
+	    if( IEEE754_Subnormal )
+	    {
+	    	if(e==0) e = 1;
+	    	else { m += (1ULL<<52); }
+	    }
+	    else { m += (1ULL<<52); }
+
+	    // exponent bias
+	    e -= 1023;
 
 	    // round to zero
 	    if(e<EXPMIN) { e=0; m=0; } 
@@ -102,21 +122,27 @@ struct IFloat64T
 	    unsigned int lbc = 32 - hbc;
 	    // std::cout<<"E="<<E<<", m="<<m<<", e="<<e<<", s="<<s<<", Ebin="<<Ebin<<", hbc="<<hbc<<", mbc="<<mbc<<", lbc="<<lbc<<"\n";
 	
+	    //int64_t _hp = ( extractBits( m, 64-hbc, hbc ) ^ s ) - s;
 	    int64_t hp = ( extractBits( m, 64-hbc, hbc ) ^ s ) - s;
 	    int64_t mp = ( extractBits( m , lbc, 32 ) ^ s ) - s;
 	    int64_t lp = ( extractBits( m , 0, lbc ) ^ s ) - s;
-	    
-	    /* SSE2 exemple to add lp and mp
-	    __m128i a = _mm_set_epi64x( lp , mp );
-	    __m128i b = _mm_loadu_si128( (__m128i*) (msum+Ebin) );
-	    __m128i c = _mm_add_epi64( a , b );
-	    _mm_storeu_si128( (__m128i*) (msum+Ebin) , c );
-	    */
 
-	    // std::cout<<"Ebin="<<Ebin<<", m="<<mantissaAsDouble(m)<<"("<<m<<")" <<", lp="<<lp<<", mp="<<mp<<", hp="<<hp<<"\n";
-	    msum[Ebin] += lp;
-	    msum1[Ebin] += mp;
-	    msum2[Ebin] += hp;
+#	    ifdef IFloat64T_SHIFT_MSUM
+	    	msum[Ebin] += lp;
+	    	msum1[Ebin] += mp;
+	    	msum2[Ebin] += hp;
+#	    else
+#	    	ifdef IFloat64T_HAS_AVX2
+	    		__m256i a = _mm256_loadu_si256( (__m256i*)(msum+Ebin) );
+	    		__m256i b = { lp, mp, hp, 0 };
+	    		a = _mm256_add_epi64( a, b );
+	    		_mm256_storeu_si256( (__m256i*)(msum+Ebin) , a );
+#	    	else
+	    		msum[Ebin] += lp;
+	    		msum[Ebin+1] += mp;
+	    		msum[Ebin+2] += hp;
+#	    	endif
+#	    endif
 	}
     }
 
@@ -181,6 +207,7 @@ struct IFloat64T
     inline void normalize()
     {
 	// flatten shifted arrays
+#ifdef IFloat64T_SHIFT_MSUM
 	msum[1] += msum1[0];
 	for(uint32_t i=2;i<EXPSLOTS;i++)
 	{
@@ -188,7 +215,7 @@ struct IFloat64T
 	}
 	for(uint32_t i=0;i<EXPSLOTS-1;i++) { msum1[i]=0; }
 	for(uint32_t i=0;i<EXPSLOTS-2;i++) { msum2[i]=0; }
-
+#endif
 	// search for max exponent, to avoid pushing negative sign to the highest exponent (precision concern)
 	emax = EXPSLOTS-1;
 	while( emax>0 && msum[emax]==0) --emax;
