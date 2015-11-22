@@ -8,8 +8,13 @@ double if64SumMpiReduceSum(uint64_t n, const double * x, MPI_Comm comm)
 
     IFloat64 tmp;
     tmp.addValues(n,x);
+    int64_t buf[IFloat64::EXPSLOTS+1];
+    for(int i=0;i<IFloat64::EXPSLOTS;i++) buf[i]=tmp.msum[i];
+    buf[IFloat64::EXPSLOTS] = tmp.flags;
 
-    MPI_Allreduce( MPI_IN_PLACE, tmp.msum , IFloat64::EXPSLOTS , MPI_LONG_LONG_INT, MPI_SUM, comm );
+    MPI_Allreduce( MPI_IN_PLACE, buf , IFloat64::EXPSLOTS+1 , MPI_LONG_LONG_INT, MPI_SUM, comm );
+    for(int i=0;i<IFloat64::EXPSLOTS;i++) tmp.msum[i]=buf[i];
+    tmp.flags = buf[IFloat64::EXPSLOTS];
     tmp.normalize();
 
     return tmp.toDouble();
@@ -55,16 +60,14 @@ void if64MpiReduceSum(uint64_t n, double * buf, MPI_Comm comm)
     if( localEnd > localStart )
     {
     	MPI_Waitall(nproc-1, recvRequest, MPI_STATUSES_IGNORE);
-	IFloat64 tmp;
 	double d[nproc];
 	for( uint64_t i=localStart; i<localEnd; i++)
 	{
 		for(int j=0;j<(nproc-1);j++) { d[j] = localValues[ (localEnd-localStart)*j + i-localStart ]; }
 		d[nproc-1] = buf[i];
-		tmp.reset();
+		IFloat64 tmp;
 		tmp.addValues(nproc,d);
-		tmp.removeCarries();
-		buf[i] = tmp.sumMantissas();
+		buf[i] = tmp.toDouble();
 	}
     }
 
